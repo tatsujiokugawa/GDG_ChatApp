@@ -17,7 +17,7 @@ HTML_TEMPLATE = """
 <head>
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
-    <title>GDG Discussion Chat</title>
+    <title>Global Discussion Group ChatRoom</title>
     <script src="https://cdn.socket.io/4.7.5/socket.io.min.js"></script>
     
     <style>
@@ -25,6 +25,7 @@ HTML_TEMPLATE = """
         .sr-only { position: absolute; width: 1px; height: 1px; padding: 0; margin: -1px; overflow: hidden; clip: rect(0,0,0,0); border: 0; }
         #chat-log { border: 2px solid #ccc; height: 400px; overflow-y: scroll; padding: 15px; margin-bottom: 15px; background: #f9f9f9; }
         .message { margin-bottom: 10px; padding: 8px; border-bottom: 1px solid #eee; }
+        .timestamp { color: #666; font-size: 0.9em; margin-left: 5px; margin-right: 5px; }
         .input-group { margin-bottom: 15px; }
         label { display: block; font-weight: bold; margin-bottom: 5px; }
         input[type="text"] { width: 100%; padding: 10px; font-size: 16px; box-sizing: border-box; }
@@ -34,8 +35,8 @@ HTML_TEMPLATE = """
 <body>
 
     <header>
-        <h1>GDG Discussion Chat</h1>
-        <p>A real-time chatroom for all Global Discussion Group members:</p>
+        <h1>Global Discussion Group ChatRoom</h1>
+        <p>Welcome to the real-time chatroom for all GDG members.</p>
     </header>
 
     <main>
@@ -72,8 +73,10 @@ HTML_TEMPLATE = """
             var div = document.createElement('div');
             div.className = 'message';
             
-            // Format so that screen readers read it naturally as "Name: Message"
-            div.innerHTML = '<strong>' + data.user + ':</strong> ' + data.msg;
+            // 投稿者名、タイムゾーン付きタイムスタンプ、メッセージを表示
+            div.innerHTML = '<strong>' + data.user + '</strong>' + 
+                            '<span class="timestamp">(' + data.time + '):</span> ' + 
+                            data.msg;
             log.appendChild(div);
             
             // Auto-scroll to the bottom
@@ -89,7 +92,26 @@ HTML_TEMPLATE = """
             var msg = msgField.value.trim();
             
             if(msg) {
-                socket.emit('message', {user: user, msg: msg});
+                var now = new Date();
+                var hours = String(now.getHours()).padStart(2, '0');
+                var minutes = String(now.getMinutes()).padStart(2, '0');
+                
+                // 【パターン1】ブラウザから各国のローカルタイムゾーン（JST, ESTなど）を自動取得
+                var tz = '';
+                try {
+                    var options = { timeZoneName: 'short' };
+                    var formatter = new Intl.DateTimeFormat('en-US', options);
+                    var parts = formatter.formatToParts(now);
+                    var tzPart = parts.find(p => p.type === 'timeZoneName');
+                    tz = tzPart ? ' ' + tzPart.value : '';
+                } catch(e) {
+                    tz = ''; // 取得エラー時は空文字
+                }
+
+                // 時刻にタイムゾーン情報を組み込む
+                var timestamp = hours + ':' + minutes + tz;
+
+                socket.emit('message', {user: user, msg: msg, time: timestamp});
                 msgField.value = '';
                 msgField.focus(); // Keep focus on the input for continuous typing
             }
