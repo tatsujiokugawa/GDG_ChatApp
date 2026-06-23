@@ -1,15 +1,18 @@
 import os
 from collections import deque
-from flask import Flask, render_template_string
+from flask import Flask, render_template_string, request
 from flask_socketio import SocketIO, emit
 
 app = Flask(__name__)
-app.config['SECRET_KEY'] = 'meet_backchat_secret_key'
+app.config['SECRET_KEY'] = os.environ.get('SECRET_KEY', 'meet_backchat_secret_key')
 
-# 自動で最適な非同期モード（eventletなど）を選択
+# 共通パスワードの設定（環境変数から取得、未設定ならデフォルト値）
+CHAT_PASSWORD = os.environ.get('CHAT_PASSWORD', 'gdg2026')
+
+# 自動で最適な非同期モードを選択
 socketio = SocketIO(app, cors_allowed_origins="*")
 
-# サーバーのメモリ上に過去ログを保存するキュー（最大100件に拡張）
+# サーバーのメモリ上に過去ログを保存するキュー（最大100件）
 MAX_HISTORY = 100
 chat_history = deque(maxlen=MAX_HISTORY)
 
@@ -33,8 +36,10 @@ HTML_TEMPLATE = """
         .timestamp { color: #666; font-size: 0.9em; margin-left: 5px; margin-right: 5px; }
         .input-group { margin-bottom: 15px; }
         label { display: block; font-weight: bold; margin-bottom: 5px; }
-        input[type="text"] { width: 100%; padding: 10px; font-size: 16px; box-sizing: border-box; }
+        input[type="text"], input[type="password"] { width: 100%; padding: 10px; font-size: 16px; box-sizing: border-box; }
         button { padding: 10px 20px; font-size: 16px; cursor: pointer; background: #007bff; color: white; border: none; border-radius: 4px; }
+        #auth-area { background: #f0f0f0; padding: 20px; border-radius: 8px; margin-bottom: 20px; border: 1px solid #ddd; }
+        #chat-area { display: none; }
     </style>
 </head>
 <body>
@@ -45,50 +50,92 @@ HTML_TEMPLATE = """
     </header>
 
     <main>
-        <section aria-labelledby="log-heading">
-            <h2 id="log-heading" class="sr-only">Chat History</h2>
-            <div id="chat-log" role="log" aria-live="polite" aria-relevant="additions">
-                <div class="message" id="system-msg"><em>System: Connected to the chatroom. Loading history...</em></div>
+        <section id="auth-area" aria-labelledby="auth-heading">
+            <h2 id="auth-heading">Authentication Required</h2>
+            <div class="input-group">
+                <label for="room-password">Enter Room Password</label>
+                <input id="room-password" type="password" placeholder="Password" onkeypress="handleAuthKeyPress(event)">
             </div>
+            <button onclick="authenticate()">Enter Room</button>
+            <p id="auth-error" style="color: red; margin-top: 10px; display: none;"></p>
         </section>
 
-        <section aria-labelledby="form-heading">
-            <h2 id="form-heading" class="sr-only">Send a Message</h2>
-            
-            <div class="input-group">
-                <label for="username">Your Name</label>
-                <input id="username" type="text" placeholder="e.g., John" autocomplete="name">
-            </div>
+        <section id="chat-area">
+            <section aria-labelledby="log-heading">
+                <h2 id="log-heading" class="sr-only">Chat History</h2>
+                <div id="chat-log" role="log" aria-live="polite" aria-relevant="additions">
+                    <div class="message" id="system-msg"><em>System: Connected to the chatroom. Loading history...</em></div>
+                </div>
+            </section>
 
-            <div class="input-group">
-                <label for="myMessage">Message</label>
-                <textarea id="myMessage" rows="2" placeholder="Type your message here and press Enter" onkeypress="handleKeyPress(event)" style="width: 100%; padding: 10px; font-size: 16px; box-sizing: border-box; resize: none; overflow-y: auto; font-family: sans-serif;"></textarea>
-            </div>
+            <section aria-labelledby="form-heading">
+                <h2 id="form-heading" class="sr-only">Send a Message</h2>
+                
+                <div class="input-group">
+                    <label for="username">Your Name</label>
+                    <input id="username" type="text" placeholder="e.g., John" autocomplete="name">
+                </div>
 
-            <button onclick="sendMessage()">Send</button>
+                <div class="input-group">
+                    <label for="myMessage">Message</label>
+                    <textarea id="myMessage" rows="2" placeholder="Type your message here and press Enter" onkeypress="handleKeyPress(event)" style="width: 100%; padding: 10px; font-size: 16px; box-sizing: border-box; resize: none; overflow-y: auto; font-family: sans-serif;"></textarea>
+                </div>
+
+                <button onclick="sendMessage()">Send</button>
+            </section>
         </section>
     </main>
 
     <script>
-        var socket = io();
+        var socket = io({ autoConnect: false }); // 認証後に接続するため最初は自動接続しない
         var myClientId = null;
+        var enteredPassword = "";
 
-        // 画面が読み込まれたら、ブラウザから前回の名前を自動復元する
+        // 画面読み込み時に名前の自動復元と、パスワードがあれば自動入力（またはローカルストレージからの復元も可能ですが、今回は安全のため都度入力）
         window.addEventListener('DOMContentLoaded', (event) => {
             var savedUser = localStorage.getItem('chat_username');
             if (savedUser) {
                 document.getElementById('username').value = savedUser;
             }
+            document.getElementById('room-password').focus();
         });
 
-        // ブラウザの機能で「ピピッ」と通知音を鳴らす関数（外部ファイル不要）
+        // 認証処理
+        function authenticate() {
+            var pwdField = document.getElementById('room-password');
+            enteredPassword = pwdField.value.trim();
+            
+            if (!enteredPassword) {
+                showAuthError("Password cannot be empty.");
+                return;
+            }
+
+            // WebSocket接続を開始し、認証用パスワードを同封して接続を要求する
+            socket.auth = { password: enteredPassword };
+            socket.connect();
+        }
+
+        function showAuthError(msg) {
+            var errEl = document.getElementById('auth-error');
+            errEl.textContent = msg;
+            errEl.style.display = "block";
+        }
+
+        // 認証パスワード入力欄でのEnterキー制御
+        function handleAuthKeyPress(event) {
+            if (event.key === 'Enter') {
+                event.preventDefault();
+                authenticate();
+            }
+        }
+
+        // ブラウザの機能で「ピピッ」と通知音を鳴らす関数
         function playNotificationSound() {
             try {
                 var AudioContext = window.AudioContext || window.webkitAudioContext;
                 if (!AudioContext) return;
                 var context = new AudioContext();
                 
-                // 1つ目の音（ピ）
                 var osc1 = context.createOscillator();
                 var gain1 = context.createGain();
                 osc1.type = 'sine';
@@ -100,7 +147,6 @@ HTML_TEMPLATE = """
                 osc1.start();
                 osc1.stop(context.currentTime + 0.08);
 
-                // 2つ目の音（ピッ）少しずらして高めの音
                 setTimeout(function() {
                     var osc2 = context.createOscillator();
                     var gain2 = context.createGain();
@@ -119,11 +165,19 @@ HTML_TEMPLATE = """
             }
         }
 
-        // 接続時、サーバーから自分のソケットIDを受け取る
+        // 接続成功（認証成功）時
         socket.on('connect', function() {
             myClientId = socket.id;
+            document.getElementById('auth-area').style.display = 'none';
+            document.getElementById('chat-area').style.display = 'block';
+            
             var sysMsg = document.getElementById('system-msg');
             if (sysMsg) sysMsg.innerHTML = '<em>System: Connected to the chatroom.</em>';
+        });
+
+        // 認証失敗時
+        socket.on('connect_error', function(err) {
+            showAuthError(err.message || "Authentication failed.");
         });
 
         // 過去のログを一括で受け取る処理
@@ -141,7 +195,6 @@ HTML_TEMPLATE = """
         socket.on('message', function(data) {
             appendMessage(data);
             
-            // 他の人が書き込んだ（送信者のIDが自分と違う）場合のみ音を鳴らす
             if (data.sender_id !== myClientId) {
                 playNotificationSound();
             }
@@ -170,14 +223,17 @@ HTML_TEMPLATE = """
             var msg = msgField.value.trim();
             
             if(msg) {
-                // 入力された名前をブラウザに保存（空欄なら削除）
                 if(userField.value.trim()) {
                     localStorage.setItem('chat_username', userField.value.trim());
                 } else {
                     localStorage.removeItem('chat_username');
                 }
 
+                // タイムスタンプを YYYY/MM/DD/HH/MM 形式で生成
                 var now = new Date();
+                var year = now.getFullYear();
+                var month = String(now.getMonth() + 1).padStart(2, '0');
+                var date = String(now.getDate()).padStart(2, '0');
                 var hours = String(now.getHours()).padStart(2, '0');
                 var minutes = String(now.getMinutes()).padStart(2, '0');
                 
@@ -192,10 +248,10 @@ HTML_TEMPLATE = """
                     tz = '';
                 }
 
-                var timestamp = hours + ':' + minutes + tz;
+                // YYYY/MM/DD/HH/MM の形に組み立て
+                var timestamp = year + '/' + month + '/' + date + '/' + hours + '/' + minutes + tz;
 
-                // 自分のID(myClientId)も一緒にサーバーに送る
-                socket.emit('message', {user: user, msg: msg, time: timestamp, sender_id: myClientId});
+                socket.emit('message', {user: user, msg: msg, time: timestamp, sender_id: myClientId, password: enteredPassword});
                 msgField.value = '';
                 msgField.focus();
             }
@@ -203,12 +259,10 @@ HTML_TEMPLATE = """
 
         // キーボード入力時の処理
         function handleKeyPress(event) {
-            // Enter単体であれば送信、Shift + Enter であれば改行
             if (event.key === 'Enter' && !event.shiftKey) {
-                event.preventDefault(); // Enterによる標準の改行を防止して送信
+                event.preventDefault(); 
                 sendMessage();
             }
-            // 3行目以降の自動スクロールはブラウザの標準挙動により追従します
         }
     </script>
 </body>
@@ -219,17 +273,33 @@ HTML_TEMPLATE = """
 def index():
     return render_template_string(HTML_TEMPLATE)
 
-# 新しく誰かが接続した際、その人だけに過去のログ（最大100件）を送信する
+# 接続要求があった時の認証チェック
 @socketio.on('connect')
-def handle_connect():
+def handle_connect(auth):
+    # パスワードが一致しない場合は接続を拒否
+    if not auth or auth.get('password') != CHAT_PASSWORD:
+        return False  # Falseを返すとクライアント側にconnect_errorイベントが飛ぶ
+    
+    # 認証成功の場合のみ過去のログを送信
     emit('chat_history', list(chat_history))
 
 @socketio.on('message')
 def handle_message(data):
-    # メッセージを受け取ったら、まずサーバーのメモリ（最大100件）に追加
-    chat_history.append(data)
-    # 全員にブロードキャスト
-    emit('message', data, broadcast=True)
+    # メッセージ送信時も簡易的なパスワードチェック（セキュリティ強化）
+    if data.get('password') != CHAT_PASSWORD:
+        return
+        
+    # クライアントに送り返すデータからパスワードを除外
+    broadcast_data = {
+        'user': data.get('user'),
+        'msg': data.get('msg'),
+        'time': data.get('time'),
+        'sender_id': data.get('sender_id')
+    }
+    
+    chat_history.append(broadcast_data)
+    emit('message', broadcast_data, broadcast=True)
 
 if __name__ == '__main__':
-    socketio.run(app, host='0.0.0.0', port=5000, debug=True)
+    # socketio.run(app, host='0.0.0.0', port=5000, debug=True)
+    socketio.run(app, host='0.0.0.0', port=8080, debug=True)
