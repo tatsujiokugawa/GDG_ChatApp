@@ -1,20 +1,96 @@
 import os
-from collections import deque
-from flask import Flask, render_template_string, request
+import urllib.parse
+from flask import Flask, render_template_string
 from flask_socketio import SocketIO, emit
+#import psycopg2
+import psycopg as psycopg2
+from psycopg2.extras import DictCursor
 
 app = Flask(__name__)
 app.config['SECRET_KEY'] = os.environ.get('SECRET_KEY', 'meet_backchat_secret_key')
 
-# 共通パスワードの設定（環境変数から取得、未設定ならデフォルト値）
+# 共通パスワードの設定
 CHAT_PASSWORD = os.environ.get('CHAT_PASSWORD', 'gdg2026')
 
-# 自動で最適な非同期モードを選択
+# SocketIOの設定
 socketio = SocketIO(app, cors_allowed_origins="*")
 
-# サーバーのメモリ上に過去ログを保存するキュー（最大100件）
+# Supabaseの接続情報（環境変数から取得、なければデフォルト値）
+# ⚠️ テスト時はここに直接手順1-7のURLを書いても動きます
+SUPABASE_URL = os.environ.get('SUPABASE_URL', 'ここに手順1-7でコピーしたURIを貼り付ける')
 MAX_HISTORY = 100
-chat_history = deque(maxlen=MAX_HISTORY)
+
+def get_db_connection():
+    """Supabase(PostgreSQL)への接続を確立する関数"""
+    return psycopg2.connect(SUPABASE_URL)
+
+def init_db():
+    """テーブルの初期化を行う関数"""
+    conn = get_db_connection()
+    try:
+        with conn.cursor() as cursor:
+            cursor.execute('''
+                CREATE TABLE IF NOT EXISTS chat_messages (
+                    id SERIAL PRIMARY KEY,
+                    username TEXT,
+                    msg TEXT,
+                    time_str TEXT,
+                    sender_id TEXT
+                )
+            ''')
+            conn.commit()
+    finally:
+        conn.close()
+
+def save_message(user, msg, time, sender_id):
+    """メッセージをSupabaseに保存し、100件を超えた古いログを自動削除する"""
+    conn = get_db_connection()
+    try:
+        with conn.cursor() as cursor:
+            # メッセージの挿入
+            cursor.execute(
+                'INSERT INTO chat_messages (username, msg, time_str, sender_id) VALUES (%s, %s, %s, %s)',
+                (user, msg, time, sender_id)
+            )
+            
+            # 最新の100件以外（古いレコード）を自動的に削除
+            cursor.execute('''
+                DELETE FROM chat_messages 
+                WHERE id NOT IN (
+                    SELECT id FROM chat_messages ORDER BY id DESC LIMIT %s
+                )
+            ''', (MAX_HISTORY,))
+            conn.commit()
+    except Exception as e:
+        print(f"Database error: {e}")
+    finally:
+        conn.close()
+
+def get_history():
+    """Supabaseから最新の100件を古い順に取得する"""
+    conn = get_db_connection()
+    history = []
+    try:
+        with conn.cursor(cursor_factory=DictCursor) as cursor:
+            cursor.execute('SELECT username, msg, time_str, sender_id FROM chat_messages ORDER BY id DESC LIMIT %s', (MAX_HISTORY,))
+            rows = cursor.fetchall()
+            
+            # 降順で取得されるため、チャット表示用に反転（昇順）させる
+            for row in reversed(rows):
+                history.append({
+                    'user': row['username'],
+                    'msg': row['msg'],
+                    'time': row['time_str'],
+                    'sender_id': row['sender_id']
+                })
+    except Exception as e:
+        print(f"Database error: {e}")
+    finally:
+        conn.close()
+    return history
+
+# 起動時にデータベース構造を確認・作成
+init_db()
 
 # -------------------------------------------------------------------------
 # Completely English & Accessibility-friendly HTML Template
@@ -87,20 +163,27 @@ HTML_TEMPLATE = """
     </main>
 
     <script>
-        var socket = io({ autoConnect: false }); // 認証後に接続するため最初は自動接続しない
+        var socket = io({ autoConnect: false }); 
         var myClientId = null;
         var enteredPassword = "";
 
-        // 画面読み込み時に名前の自動復元と、パスワードがあれば自動入力（またはローカルストレージからの復元も可能ですが、今回は安全のため都度入力）
         window.addEventListener('DOMContentLoaded', (event) => {
             var savedUser = localStorage.getItem('chat_username');
             if (savedUser) {
                 document.getElementById('username').value = savedUser;
             }
-            document.getElementById('room-password').focus();
+            
+            // パスワード自動復元
+            var savedPassword = localStorage.getItem('chat_password');
+            if (savedPassword) {
+                document.getElementById('room-password').value = savedPassword;
+                enteredPassword = savedPassword;
+                executeConnect(savedPassword);
+            } else {
+                document.getElementById('room-password').focus();
+            }
         });
 
-        // 認証処理
         function authenticate() {
             var pwdField = document.getElementById('room-password');
             enteredPassword = pwdField.value.trim();
@@ -109,9 +192,11 @@ HTML_TEMPLATE = """
                 showAuthError("Password cannot be empty.");
                 return;
             }
+            executeConnect(enteredPassword);
+        }
 
-            // WebSocket接続を開始し、認証用パスワードを同封して接続を要求する
-            socket.auth = { password: enteredPassword };
+        function executeConnect(pwd) {
+            socket.auth = { password: pwd };
             socket.connect();
         }
 
@@ -119,9 +204,9 @@ HTML_TEMPLATE = """
             var errEl = document.getElementById('auth-error');
             errEl.textContent = msg;
             errEl.style.display = "block";
+            localStorage.removeItem('chat_password');
         }
 
-        // 認証パスワード入力欄でのEnterキー制御
         function handleAuthKeyPress(event) {
             if (event.key === 'Enter') {
                 event.preventDefault();
@@ -129,7 +214,6 @@ HTML_TEMPLATE = """
             }
         }
 
-        // ブラウザの機能で「ピピッ」と通知音を鳴らす関数
         function playNotificationSound() {
             try {
                 var AudioContext = window.AudioContext || window.webkitAudioContext;
@@ -159,28 +243,27 @@ HTML_TEMPLATE = """
                     osc2.start();
                     osc2.stop(context.currentTime + 0.1);
                 }, 80);
-
             } catch (e) {
                 console.log("Audio play blocked or not supported:", e);
             }
         }
 
-        // 接続成功（認証成功）時
         socket.on('connect', function() {
             myClientId = socket.id;
             document.getElementById('auth-area').style.display = 'none';
             document.getElementById('chat-area').style.display = 'block';
             
+            // ログイン成功したパスワードをブラウザに記憶
+            localStorage.setItem('chat_password', enteredPassword);
+            
             var sysMsg = document.getElementById('system-msg');
             if (sysMsg) sysMsg.innerHTML = '<em>System: Connected to the chatroom.</em>';
         });
 
-        // 認証失敗時
         socket.on('connect_error', function(err) {
-            showAuthError(err.message || "Authentication failed.");
+            showAuthError(err.message || "Authentication failed. Please check your password.");
         });
 
-        // 過去のログを一括で受け取る処理
         socket.on('chat_history', function(historyData) {
             var log = document.getElementById('chat-log');
             log.innerHTML = '<div class="message"><em>System: History loaded.</em></div>';
@@ -191,19 +274,15 @@ HTML_TEMPLATE = """
             log.scrollTop = log.scrollHeight;
         });
 
-        // 単発のメッセージ受信処理
         socket.on('message', function(data) {
             appendMessage(data);
-            
             if (data.sender_id !== myClientId) {
                 playNotificationSound();
             }
-            
             var log = document.getElementById('chat-log');
             log.scrollTop = log.scrollHeight;
         });
 
-        // メッセージを画面に追加する共通関数
         function appendMessage(data) {
             var log = document.getElementById('chat-log');
             var div = document.createElement('div');
@@ -214,7 +293,6 @@ HTML_TEMPLATE = """
             log.appendChild(div);
         }
 
-        // メッセージ送信関数
         function sendMessage() {
             var userField = document.getElementById('username');
             var msgField = document.getElementById('myMessage');
@@ -229,7 +307,6 @@ HTML_TEMPLATE = """
                     localStorage.removeItem('chat_username');
                 }
 
-                // タイムスタンプを YYYY/MM/DD/HH/MM 形式で生成
                 var now = new Date();
                 var year = now.getFullYear();
                 var month = String(now.getMonth() + 1).padStart(2, '0');
@@ -248,7 +325,6 @@ HTML_TEMPLATE = """
                     tz = '';
                 }
 
-                // YYYY/MM/DD/HH/MM の形に組み立て
                 var timestamp = year + '/' + month + '/' + date + '/' + hours + '/' + minutes + tz;
 
                 socket.emit('message', {user: user, msg: msg, time: timestamp, sender_id: myClientId, password: enteredPassword});
@@ -257,7 +333,6 @@ HTML_TEMPLATE = """
             }
         }
 
-        // キーボード入力時の処理
         function handleKeyPress(event) {
             if (event.key === 'Enter' && !event.shiftKey) {
                 event.preventDefault(); 
@@ -273,23 +348,17 @@ HTML_TEMPLATE = """
 def index():
     return render_template_string(HTML_TEMPLATE)
 
-# 接続要求があった時の認証チェック
 @socketio.on('connect')
 def handle_connect(auth):
-    # パスワードが一致しない場合は接続を拒否
     if not auth or auth.get('password') != CHAT_PASSWORD:
-        return False  # Falseを返すとクライアント側にconnect_errorイベントが飛ぶ
-    
-    # 認証成功の場合のみ過去のログを送信
-    emit('chat_history', list(chat_history))
+        return False
+    emit('chat_history', get_history())
 
 @socketio.on('message')
 def handle_message(data):
-    # メッセージ送信時も簡易的なパスワードチェック（セキュリティ強化）
     if data.get('password') != CHAT_PASSWORD:
         return
         
-    # クライアントに送り返すデータからパスワードを除外
     broadcast_data = {
         'user': data.get('user'),
         'msg': data.get('msg'),
@@ -297,9 +366,14 @@ def handle_message(data):
         'sender_id': data.get('sender_id')
     }
     
-    chat_history.append(broadcast_data)
+    save_message(
+        broadcast_data['user'],
+        broadcast_data['msg'],
+        broadcast_data['time'],
+        broadcast_data['sender_id']
+    )
+    
     emit('message', broadcast_data, broadcast=True)
 
 if __name__ == '__main__':
-    # socketio.run(app, host='0.0.0.0', port=5000, debug=True)
     socketio.run(app, host='0.0.0.0', port=8080, debug=True)
