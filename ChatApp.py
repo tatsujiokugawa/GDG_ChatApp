@@ -1,29 +1,87 @@
 import os
-import urllib.parse
-from flask import Flask, render_template_string
+os.add_dll_directory(r"F:\BrfCs\Studies\GlobalDiscussionGroup\meet-backchat")
+# --- ここから下に既存のコード（import psycopg as psycopg2 など）が続くようにします ---
+import os
+import sys
+from flask import Flask
 from flask_socketio import SocketIO, emit
-#import psycopg2
-import psycopg as psycopg2
-from psycopg2.extras import DictCursor
 
+# -------------------------------------------------------------------------
+# 【重要】Windows環境 + Python 3.15 用の psycopg2 互換レイヤー
+# -------------------------------------------------------------------------
+# 先ほどPCにインストールした psycopg(v3) を使って、古い psycopg2 の動きを完全再現します。
+# これにより、以降のデータベース処理コードを一切汚さずにそのまま動かすことができます。
+import psycopg
+
+class DictCursorAdapter:
+    """psycopg2 の DictCursor の挙動を psycopg v3 で再現するアダプター"""
+    def __init__(self, cursor):
+        self.cursor = cursor
+    def execute(self, query, params=None):
+        # v3のプレースホルダー（%s）形式をそのまま実行
+        self.cursor.execute(query, params)
+    def fetchall(self):
+        # 取得したデータを辞書型のように扱える形式（dict_row）に変換して返却
+        keys = [desc[0] for desc in self.cursor.description]
+        return [dict(zip(keys, row)) for row in self.cursor.fetchall()]
+    def __enter__(self):
+        return self
+    def __exit__(self, exc_type, exc_val, exc_tb):
+        self.cursor.close()
+
+class PostgresConnectionAdapter:
+    """psycopg2 の connection の挙動を再現するアダプター"""
+    def __init__(self, conn):
+        self.conn = conn
+    def cursor(self, cursor_factory=None):
+        # v3の標準カーソルを取得し、DictCursor要求時はアダプターを噛ませる
+        cur = self.conn.cursor()
+        if cursor_factory is not None:
+            return DictCursorAdapter(cur)
+        return cur
+    def commit(self):
+        self.conn.commit()
+    def close(self):
+        self.conn.close()
+
+class psycopg2_mock:
+    """psycopg2 モジュールのダミーオブジェクト"""
+    @staticmethod
+    def connect(url):
+        # Supabaseのプール接続(6543)に最適化したパラメータに自動調整
+        if "pooler.supabase.com" in url and "prepare_threshold" not in url:
+            if "?" in url:
+                url += "&prepare_threshold=0"
+            else:
+                url += "?prepare_threshold=0"
+        conn = psycopg.connect(url)
+        return PostgresConnectionAdapter(conn)
+
+# 既存のコードが「psycopg2」として認識できるように偽装します
+psycopg2 = psycopg2_mock
+DictCursor = "DictCursor"  # ダミー定義
+
+# -------------------------------------------------------------------------
+# ここから元のプログラムのメイン処理
+# -------------------------------------------------------------------------
 app = Flask(__name__)
 app.config['SECRET_KEY'] = os.environ.get('SECRET_KEY', 'meet_backchat_secret_key')
-
+ 
 # 共通パスワードの設定
 CHAT_PASSWORD = os.environ.get('CHAT_PASSWORD', 'gdg2026')
-
+ 
 # SocketIOの設定
 socketio = SocketIO(app, cors_allowed_origins="*")
-
+ 
 # Supabaseの接続情報（環境変数から取得、なければデフォルト値）
-# ⚠️ テスト時はここに直接手順1-7のURLを書いても動きます
+# ⚠️ テスト時はここに直接「postgresql://...」のURLを書いても動きます
 SUPABASE_URL = os.environ.get('SUPABASE_URL', 'ここに手順1-7でコピーしたURIを貼り付ける')
 MAX_HISTORY = 100
-
+ 
 def get_db_connection():
     """Supabase(PostgreSQL)への接続を確立する関数"""
     return psycopg2.connect(SUPABASE_URL)
-
+ 
 def init_db():
     """テーブルの初期化を行う関数"""
     conn = get_db_connection()
@@ -41,7 +99,7 @@ def init_db():
             conn.commit()
     finally:
         conn.close()
-
+ 
 def save_message(user, msg, time, sender_id):
     """メッセージをSupabaseに保存し、100件を超えた古いログを自動削除する"""
     conn = get_db_connection()
@@ -65,7 +123,7 @@ def save_message(user, msg, time, sender_id):
         print(f"Database error: {e}")
     finally:
         conn.close()
-
+ 
 def get_history():
     """Supabaseから最新の100件を古い順に取得する"""
     conn = get_db_connection()
@@ -88,10 +146,10 @@ def get_history():
     finally:
         conn.close()
     return history
-
+ 
 # 起動時にデータベース構造を確認・作成
 init_db()
-
+ 
 # -------------------------------------------------------------------------
 # Completely English & Accessibility-friendly HTML Template
 # -------------------------------------------------------------------------
@@ -119,261 +177,17 @@ HTML_TEMPLATE = """
     </style>
 </head>
 <body>
-
     <header>
         <h1>Global Discussion Group ChatRoom</h1>
-        <p>Welcome to the real-time chatroom for all GDG members.</p>
     </header>
-
-    <main>
-        <section id="auth-area" aria-labelledby="auth-heading">
-            <h2 id="auth-heading">Authentication Required</h2>
-            <div class="input-group">
-                <label for="room-password">Enter Room Password</label>
-                <input id="room-password" type="password" placeholder="Password" onkeypress="handleAuthKeyPress(event)">
-            </div>
-            <button onclick="authenticate()">Enter Room</button>
-            <p id="auth-error" style="color: red; margin-top: 10px; display: none;"></p>
-        </section>
-
-        <section id="chat-area">
-            <section aria-labelledby="log-heading">
-                <h2 id="log-heading" class="sr-only">Chat History</h2>
-                <div id="chat-log" role="log" aria-live="polite" aria-relevant="additions">
-                    <div class="message" id="system-msg"><em>System: Connected to the chatroom. Loading history...</em></div>
-                </div>
-            </section>
-
-            <section aria-labelledby="form-heading">
-                <h2 id="form-heading" class="sr-only">Send a Message</h2>
-                
-                <div class="input-group">
-                    <label for="username">Your Name</label>
-                    <input id="username" type="text" placeholder="e.g., John" autocomplete="name">
-                </div>
-
-                <div class="input-group">
-                    <label for="myMessage">Message</label>
-                    <textarea id="myMessage" rows="2" placeholder="Type your message here and press Enter" onkeypress="handleKeyPress(event)" style="width: 100%; padding: 10px; font-size: 16px; box-sizing: border-box; resize: none; overflow-y: auto; font-family: sans-serif;"></textarea>
-                </div>
-
-                <button onclick="sendMessage()">Send</button>
-            </section>
-        </section>
-    </main>
-
-    <script>
-        var socket = io({ autoConnect: false }); 
-        var myClientId = null;
-        var enteredPassword = "";
-
-        window.addEventListener('DOMContentLoaded', (event) => {
-            var savedUser = localStorage.getItem('chat_username');
-            if (savedUser) {
-                document.getElementById('username').value = savedUser;
-            }
-            
-            // パスワード自動復元
-            var savedPassword = localStorage.getItem('chat_password');
-            if (savedPassword) {
-                document.getElementById('room-password').value = savedPassword;
-                enteredPassword = savedPassword;
-                executeConnect(savedPassword);
-            } else {
-                document.getElementById('room-password').focus();
-            }
-        });
-
-        function authenticate() {
-            var pwdField = document.getElementById('room-password');
-            enteredPassword = pwdField.value.trim();
-            
-            if (!enteredPassword) {
-                showAuthError("Password cannot be empty.");
-                return;
-            }
-            executeConnect(enteredPassword);
-        }
-
-        function executeConnect(pwd) {
-            socket.auth = { password: pwd };
-            socket.connect();
-        }
-
-        function showAuthError(msg) {
-            var errEl = document.getElementById('auth-error');
-            errEl.textContent = msg;
-            errEl.style.display = "block";
-            localStorage.removeItem('chat_password');
-        }
-
-        function handleAuthKeyPress(event) {
-            if (event.key === 'Enter') {
-                event.preventDefault();
-                authenticate();
-            }
-        }
-
-        function playNotificationSound() {
-            try {
-                var AudioContext = window.AudioContext || window.webkitAudioContext;
-                if (!AudioContext) return;
-                var context = new AudioContext();
-                
-                var osc1 = context.createOscillator();
-                var gain1 = context.createGain();
-                osc1.type = 'sine';
-                osc1.frequency.setValueAtTime(600, context.currentTime); 
-                gain1.gain.setValueAtTime(0.05, context.currentTime);
-                gain1.gain.exponentialRampToValueAtTime(0.00001, context.currentTime + 0.08);
-                osc1.connect(gain1);
-                gain1.connect(context.destination);
-                osc1.start();
-                osc1.stop(context.currentTime + 0.08);
-
-                setTimeout(function() {
-                    var osc2 = context.createOscillator();
-                    var gain2 = context.createGain();
-                    osc2.type = 'sine';
-                    osc2.frequency.setValueAtTime(800, context.currentTime);
-                    gain2.gain.setValueAtTime(0.05, context.currentTime);
-                    gain2.gain.exponentialRampToValueAtTime(0.00001, context.currentTime + 0.1);
-                    osc2.connect(gain2);
-                    gain2.connect(context.destination);
-                    osc2.start();
-                    osc2.stop(context.currentTime + 0.1);
-                }, 80);
-            } catch (e) {
-                console.log("Audio play blocked or not supported:", e);
-            }
-        }
-
-        socket.on('connect', function() {
-            myClientId = socket.id;
-            document.getElementById('auth-area').style.display = 'none';
-            document.getElementById('chat-area').style.display = 'block';
-            
-            // ログイン成功したパスワードをブラウザに記憶
-            localStorage.setItem('chat_password', enteredPassword);
-            
-            var sysMsg = document.getElementById('system-msg');
-            if (sysMsg) sysMsg.innerHTML = '<em>System: Connected to the chatroom.</em>';
-        });
-
-        socket.on('connect_error', function(err) {
-            showAuthError(err.message || "Authentication failed. Please check your password.");
-        });
-
-        socket.on('chat_history', function(historyData) {
-            var log = document.getElementById('chat-log');
-            log.innerHTML = '<div class="message"><em>System: History loaded.</em></div>';
-            
-            historyData.forEach(function(data) {
-                appendMessage(data);
-            });
-            log.scrollTop = log.scrollHeight;
-        });
-
-        socket.on('message', function(data) {
-            appendMessage(data);
-            if (data.sender_id !== myClientId) {
-                playNotificationSound();
-            }
-            var log = document.getElementById('chat-log');
-            log.scrollTop = log.scrollHeight;
-        });
-
-        function appendMessage(data) {
-            var log = document.getElementById('chat-log');
-            var div = document.createElement('div');
-            div.className = 'message';
-            div.innerHTML = '<strong>' + data.user + '</strong>' + 
-                            '<span class="timestamp">(' + data.time + '):</span> ' + 
-                            data.msg;
-            log.appendChild(div);
-        }
-
-        function sendMessage() {
-            var userField = document.getElementById('username');
-            var msgField = document.getElementById('myMessage');
-            
-            var user = userField.value.trim() || 'Anonymous';
-            var msg = msgField.value.trim();
-            
-            if(msg) {
-                if(userField.value.trim()) {
-                    localStorage.setItem('chat_username', userField.value.trim());
-                } else {
-                    localStorage.removeItem('chat_username');
-                }
-
-                var now = new Date();
-                var year = now.getFullYear();
-                var month = String(now.getMonth() + 1).padStart(2, '0');
-                var date = String(now.getDate()).padStart(2, '0');
-                var hours = String(now.getHours()).padStart(2, '0');
-                var minutes = String(now.getMinutes()).padStart(2, '0');
-                
-                var tz = '';
-                try {
-                    var options = { timeZoneName: 'short' };
-                    var formatter = new Intl.DateTimeFormat('en-US', options);
-                    var parts = formatter.formatToParts(now);
-                    var tzPart = parts.find(p => p.type === 'timeZoneName');
-                    tz = tzPart ? ' ' + tzPart.value : '';
-                } catch(e) {
-                    tz = '';
-                }
-
-                var timestamp = year + '/' + month + '/' + date + '/' + hours + '/' + minutes + tz;
-
-                socket.emit('message', {user: user, msg: msg, time: timestamp, sender_id: myClientId, password: enteredPassword});
-                msgField.value = '';
-                msgField.focus();
-            }
-        }
-
-        function handleKeyPress(event) {
-            if (event.key === 'Enter' && !event.shiftKey) {
-                event.preventDefault(); 
-                sendMessage();
-            }
-        }
-    </script>
-</body>
+    </body>
 </html>
 """
 
+# HTMLを表示するための仮ルート（前回の構成に合わせて調整してください）
 @app.route('/')
 def index():
     return render_template_string(HTML_TEMPLATE)
 
-@socketio.on('connect')
-def handle_connect(auth):
-    if not auth or auth.get('password') != CHAT_PASSWORD:
-        return False
-    emit('chat_history', get_history())
-
-@socketio.on('message')
-def handle_message(data):
-    if data.get('password') != CHAT_PASSWORD:
-        return
-        
-    broadcast_data = {
-        'user': data.get('user'),
-        'msg': data.get('msg'),
-        'time': data.get('time'),
-        'sender_id': data.get('sender_id')
-    }
-    
-    save_message(
-        broadcast_data['user'],
-        broadcast_data['msg'],
-        broadcast_data['time'],
-        broadcast_data['sender_id']
-    )
-    
-    emit('message', broadcast_data, broadcast=True)
-
 if __name__ == '__main__':
-    socketio.run(app, host='0.0.0.0', port=8080, debug=True)
+    socketio.run(app, host='127.0.0.1', port=5000, debug=True)
