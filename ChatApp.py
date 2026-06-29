@@ -1,16 +1,16 @@
 import os
-os.add_dll_directory(r"F:\BrfCs\Studies\GlobalDiscussionGroup\meet-backchat")
-# --- ここから下に既存のコード（import psycopg as psycopg2 など）が続くようにします ---
-import os
 import sys
-from flask import Flask
+
+# Windows（自分のパソコン）のときだけDLLディレクトリを設定
+if os.name == 'nt':
+    os.add_dll_directory(r"F:\BrfCs\Studies\GlobalDiscussionGroup\meet-backchat")
+
+from flask import Flask, render_template_string
 from flask_socketio import SocketIO, emit
 
 # -------------------------------------------------------------------------
 # 【重要】Windows環境 + Python 3.15 用の psycopg2 互換レイヤー
 # -------------------------------------------------------------------------
-# 先ほどPCにインストールした psycopg(v3) を使って、古い psycopg2 の動きを完全再現します。
-# これにより、以降のデータベース処理コードを一切汚さずにそのまま動かすことができます。
 import psycopg
 
 class DictCursorAdapter:
@@ -18,10 +18,8 @@ class DictCursorAdapter:
     def __init__(self, cursor):
         self.cursor = cursor
     def execute(self, query, params=None):
-        # v3のプレースホルダー（%s）形式をそのまま実行
         self.cursor.execute(query, params)
     def fetchall(self):
-        # 取得したデータを辞書型のように扱える形式（dict_row）に変換して返却
         keys = [desc[0] for desc in self.cursor.description]
         return [dict(zip(keys, row)) for row in self.cursor.fetchall()]
     def __enter__(self):
@@ -34,13 +32,12 @@ class PostgresConnectionAdapter:
     def __init__(self, conn):
         self.conn = conn
     def cursor(self, cursor_factory=None):
-        # v3の標準カーソルを取得し、DictCursor要求時はアダプターを噛ませる
         cur = self.conn.cursor()
         if cursor_factory is not None:
             return DictCursorAdapter(cur)
         return cur
     def commit(self):
-        self.conn.commit()
+        self.conn.conn.commit() if hasattr(self.conn, 'conn') else self.conn.commit()
     def close(self):
         self.conn.close()
 
@@ -48,7 +45,6 @@ class psycopg2_mock:
     """psycopg2 モジュールのダミーオブジェクト"""
     @staticmethod
     def connect(url):
-        # Supabaseのプール接続(6543)に最適化したパラメータに自動調整
         if "pooler.supabase.com" in url and "prepare_threshold" not in url:
             if "?" in url:
                 url += "&prepare_threshold=0"
@@ -57,33 +53,25 @@ class psycopg2_mock:
         conn = psycopg.connect(url)
         return PostgresConnectionAdapter(conn)
 
-# 既存のコードが「psycopg2」として認識できるように偽装します
 psycopg2 = psycopg2_mock
-DictCursor = "DictCursor"  # ダミー定義
+DictCursor = "DictCursor"
 
 # -------------------------------------------------------------------------
 # ここから元のプログラムのメイン処理
 # -------------------------------------------------------------------------
 app = Flask(__name__)
 app.config['SECRET_KEY'] = os.environ.get('SECRET_KEY', 'meet_backchat_secret_key')
- 
-# 共通パスワードの設定
+
 CHAT_PASSWORD = os.environ.get('CHAT_PASSWORD', 'gdg2026')
- 
-# SocketIOの設定
 socketio = SocketIO(app, cors_allowed_origins="*")
- 
-# Supabaseの接続情報（環境変数から取得、なければデフォルト値）
-# ⚠️ テスト時はここに直接「postgresql://...」のURLを書いても動きます
+
 SUPABASE_URL = os.environ.get('SUPABASE_URL', 'ここに手順1-7でコピーしたURIを貼り付ける')
 MAX_HISTORY = 100
- 
+
 def get_db_connection():
-    """Supabase(PostgreSQL)への接続を確立する関数"""
     return psycopg2.connect(SUPABASE_URL)
- 
+
 def init_db():
-    """テーブルの初期化を行う関数"""
     conn = get_db_connection()
     try:
         with conn.cursor() as cursor:
@@ -99,19 +87,15 @@ def init_db():
             conn.commit()
     finally:
         conn.close()
- 
+
 def save_message(user, msg, time, sender_id):
-    """メッセージをSupabaseに保存し、100件を超えた古いログを自動削除する"""
     conn = get_db_connection()
     try:
         with conn.cursor() as cursor:
-            # メッセージの挿入
             cursor.execute(
                 'INSERT INTO chat_messages (username, msg, time_str, sender_id) VALUES (%s, %s, %s, %s)',
                 (user, msg, time, sender_id)
             )
-            
-            # 最新の100件以外（古いレコード）を自動的に削除
             cursor.execute('''
                 DELETE FROM chat_messages 
                 WHERE id NOT IN (
@@ -123,17 +107,14 @@ def save_message(user, msg, time, sender_id):
         print(f"Database error: {e}")
     finally:
         conn.close()
- 
+
 def get_history():
-    """Supabaseから最新の100件を古い順に取得する"""
     conn = get_db_connection()
     history = []
     try:
         with conn.cursor(cursor_factory=DictCursor) as cursor:
             cursor.execute('SELECT username, msg, time_str, sender_id FROM chat_messages ORDER BY id DESC LIMIT %s', (MAX_HISTORY,))
             rows = cursor.fetchall()
-            
-            # 降順で取得されるため、チャット表示用に反転（昇順）させる
             for row in reversed(rows):
                 history.append({
                     'user': row['username'],
@@ -146,10 +127,9 @@ def get_history():
     finally:
         conn.close()
     return history
- 
-# 起動時にデータベース構造を確認・作成
+
 init_db()
- 
+
 # -------------------------------------------------------------------------
 # Completely English & Accessibility-friendly HTML Template
 # -------------------------------------------------------------------------
@@ -174,17 +154,86 @@ HTML_TEMPLATE = """
         button { padding: 10px 20px; font-size: 16px; cursor: pointer; background: #007bff; color: white; border: none; border-radius: 4px; }
         #auth-area { background: #f0f0f0; padding: 20px; border-radius: 8px; margin-bottom: 20px; border: 1px solid #ddd; }
         #chat-area { display: none; }
+        
+        /* 追加：ヘッダーのレイアウトと歯車用スタイル */
+        .welcome-container { display: flex; align-items: center; justify-content: space-between; margin-bottom: 10px; }
+        .welcome-text { font-size: 1.1em; font-weight: bold; margin: 0; }
+        .settings-btn { cursor: pointer; font-size: 24px; user-select: none; transition: transform 0.2s; }
+        .settings-btn:hover { transform: rotate(45deg); }
+        #history-status { color: #888; font-style: italic; margin: 5px 0 15px 0; }
     </style>
 </head>
 <body>
     <header>
         <h1>Global Discussion Group ChatRoom</h1>
     </header>
-    </body>
+
+    <main>
+        <div class="welcome-container">
+            <p class="welcome-text">Welcome to the real-time chatroom for all GDG members..</p>
+            <span id="settings-icon" class="settings-btn" title="Settings">⚙</span>
+        </div>
+
+        <p id="history-status">System: History being loaded.</p>
+
+        <div id="auth-area">
+            <div class="input-group">
+                <label for="password">Password</label>
+                <input type="password" id="password" placeholder="Enter room password">
+            </div>
+            <button id="login-btn">Join Chat</button>
+        </div>
+
+        <div id="chat-area">
+            <div id="chat-log" role="log" aria-live="polite"></div>
+            <div class="input-group">
+                <input type="text" id="message-input" placeholder="Type a message...">
+            </div>
+            <button id="send-btn">Send</button>
+        </div>
+    </main>
+
+    <script>
+        // 本番/ローカル共通のSocket.IO初期化
+        const socket = io();
+
+        // ダミーログイン処理（必要に応じて既存の認証ロジックと統合してください）
+        document.getElementById('login-btn').addEventListener('click', () => {
+            document.getElementById('auth-area').style.display = 'none';
+            document.getElementById('chat-area').style.display = 'block';
+            
+            // ログイン成功時にサーバーへ履歴を要求（または自動で降ってくるイベントを模擬）
+            // ここでは1.5秒後に読み込みが完了したと仮定してステータスを消去するデモを兼ねています
+            setTimeout(() => {
+                const statusMessage = document.getElementById('history-status');
+                if (statusMessage) {
+                    statusMessage.remove(); // 読み込み完了後に要素を完全に消去
+                }
+            }, 1500);
+        });
+
+        // 💡 サーバーから履歴データが届いた時の正規の処理（Socket.IOイベント）
+        socket.on('load_history', function(history) {
+            const chatLog = document.getElementById('chat-log');
+            // ここで履歴を画面に描画する処理を挟む
+            
+            // 描画が完了したら、読み込み中メッセージを完全に消去する
+            const statusMessage = document.getElementById('history-status');
+            if (statusMessage) {
+                statusMessage.remove();
+            }
+        });
+
+        // 💡 歯車アイコンがクリックされた時のイベント監視（次のステップ用）
+        document.getElementById('settings-icon').addEventListener('click', function() {
+            console.log("歯車アイコンがクリックされました。");
+            alert("Settings icon clicked! The action will be implemented in the next step.");
+        });
+    </script>
+</body>
 </html>
 """
 
-# HTMLを表示するための仮ルート（前回の構成に合わせて調整してください）
 @app.route('/')
 def index():
     return render_template_string(HTML_TEMPLATE)
