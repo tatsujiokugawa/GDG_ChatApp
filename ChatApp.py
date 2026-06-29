@@ -56,18 +56,28 @@ class psycopg2_mock:
     """psycopg2 モジュールのダミーオブジェクト"""
     @staticmethod
     def connect(url):
-        # Supabaseのプール接続(6543)に最適化したパラメータに自動調整
-        if "pooler.supabase.com" in url and "prepare_threshold" not in url:
-            if "?" in url:
-                url += "&prepare_threshold=0"
-            else:
-                url += "?prepare_threshold=0"
-        
-        # 追加：新しいpsycopgが嫌がるパラメータを安全に削除
-        url = url.replace("pgbouncer=true", "").replace("&&", "&").replace("?&", "?")
+        # URLに「?」が含まれている場合、それ以降の邪魔なオプション（pgbouncer等）をすべて切り捨てる
+        if "?" in url:
+            url = url.split("?")[0]
         
         conn = psycopg.connect(url)
         return PostgresConnectionAdapter(conn)
+# class psycopg2_mock:
+#     """psycopg2 モジュールのダミーオブジェクト"""
+#     @staticmethod
+#     def connect(url):
+#         # Supabaseのプール接続(6543)に最適化したパラメータに自動調整
+#         if "pooler.supabase.com" in url and "prepare_threshold" not in url:
+#             if "?" in url:
+#                 url += "&prepare_threshold=0"
+#             else:
+#                 url += "?prepare_threshold=0"
+        
+#         # 追加：新しいpsycopgが嫌がるパラメータを安全に削除
+#         url = url.replace("pgbouncer=true", "").replace("&&", "&").replace("?&", "?")
+        
+#         conn = psycopg.connect(url)
+#         return PostgresConnectionAdapter(conn)
 psycopg2 = psycopg2_mock
 DictCursor = "DictCursor"
 
