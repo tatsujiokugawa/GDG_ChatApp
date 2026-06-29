@@ -4,3 +4,4 @@ gevent
 gevent-websocket
 supabase
 gunicorn
+psycopg[binary]
