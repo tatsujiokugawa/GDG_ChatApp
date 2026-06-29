@@ -41,18 +41,33 @@ class PostgresConnectionAdapter:
     def close(self):
         self.conn.close()
 
+# class psycopg2_mock:
+#     """psycopg2 モジュールのダミーオブジェクト"""
+#     @staticmethod
+#     def connect(url):
+#         if "pooler.supabase.com" in url and "prepare_threshold" not in url:
+#             if "?" in url:
+#                 url += "&prepare_threshold=0"
+#             else:
+#                 url += "?prepare_threshold=0"
+#         conn = psycopg.connect(url)
+#         return PostgresConnectionAdapter(conn)
 class psycopg2_mock:
     """psycopg2 モジュールのダミーオブジェクト"""
     @staticmethod
     def connect(url):
+        # Supabaseのプール接続(6543)に最適化したパラメータに自動調整
         if "pooler.supabase.com" in url and "prepare_threshold" not in url:
             if "?" in url:
                 url += "&prepare_threshold=0"
             else:
                 url += "?prepare_threshold=0"
+        
+        # 追加：新しいpsycopgが嫌がるパラメータを安全に削除
+        url = url.replace("pgbouncer=true", "").replace("&&", "&").replace("?&", "?")
+        
         conn = psycopg.connect(url)
         return PostgresConnectionAdapter(conn)
-
 psycopg2 = psycopg2_mock
 DictCursor = "DictCursor"
 
@@ -227,7 +242,7 @@ HTML_TEMPLATE = """
         // 💡 歯車アイコンがクリックされた時のイベント監視（次のステップ用）
         document.getElementById('settings-icon').addEventListener('click', function() {
             console.log("歯車アイコンがクリックされました。");
-            alert("Settings icon clicked! The action will be implemented in the next step.");
+            alert("*** Under Construction; To be built by July 11th ***");
         });
     </script>
 </body>
