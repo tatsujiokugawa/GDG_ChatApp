@@ -230,4 +230,4 @@ def index():
 if __name__ == '__main__':
     # Render本番環境でポートを動的に取得して起動できるように最適化
     port = int(os.environ.get("PORT", 5000))
-    socketio.run(app, host='0.0.0.0', port=port, debug=True)
+    socketio.run(app, host='0.0.0.0', port=port, debug=True, allow_unsafe_werkzeug=True)
