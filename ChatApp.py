@@ -87,12 +87,16 @@ DictCursor = "DictCursor"
 app = Flask(__name__)
 app.config['SECRET_KEY'] = os.environ.get('SECRET_KEY', 'meet_backchat_secret_key')
 
-CHAT_PASSWORD = os.environ.get('CHAT_PASSWORD', 'gdg2026')
+#CHAT_PASSWORD = os.environ.get('CHAT_PASSWORD', 'gdg2026')
+# socketio = SocketIO(app, cors_allowed_origins="*")
+
+# SUPABASE_URL = os.environ.get('SUPABASE_URL', 'ここに手順1-7でコピーしたURIを貼り付ける')
+# MAX_HISTORY = 100
 socketio = SocketIO(app, cors_allowed_origins="*")
 
-SUPABASE_URL = os.environ.get('SUPABASE_URL', 'ここに手順1-7でコピーしたURIを貼り付ける')
+# 以下のように、環境変数からだけ受け取るシンプルな形にします
+SUPABASE_URL = os.environ.get('SUPABASE_URL')
 MAX_HISTORY = 100
-
 def get_db_connection():
     return psycopg2.connect(SUPABASE_URL)
 
