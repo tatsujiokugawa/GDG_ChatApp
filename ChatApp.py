@@ -1,4 +1,5 @@
 import os
+os.environ["PSYCOPG_IMPL"] = "python"
 import sys
 from flask import Flask, render_template_string
 from flask_socketio import SocketIO, emit
