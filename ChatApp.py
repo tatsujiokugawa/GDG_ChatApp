@@ -1,8 +1,26 @@
 import os
-os.environ["PSYCOPG_IMPL"] = "python"
 import sys
+from datetime import datetime
 from flask import Flask, render_template_string
 from flask_socketio import SocketIO, emit
+
+# -------------------------------------------------------------------------
+# 環境変数・初期設定
+# -------------------------------------------------------------------------
+os.environ["PSYCOPG_IMPL"] = "python"
+
+app = Flask(__name__)
+app.config['SECRET_KEY'] = os.environ.get('SECRET_KEY', 'meet_backchat_secret_key')
+
+# Render環境やローカルスレッド環境で安定して動作するよう threading を指定
+socketio = SocketIO(
+    app, 
+    cors_allowed_origins="*", 
+    async_mode="threading"
+)
+
+SUPABASE_URL = os.environ.get('SUPABASE_URL')
+MAX_HISTORY = 100
 
 # -------------------------------------------------------------------------
 # 【本番・Render環境最適化】 psycopg v3 互換レイヤー
@@ -41,10 +59,8 @@ class psycopg2_mock:
     """psycopg2 モジュールのダミーオブジェクト"""
     @staticmethod
     def connect(url):
-        # URLに「?」が含まれている場合、それ以降の邪魔なオプション（pgbouncer等）をすべて切り捨てる
         if "?" in url:
             url = url.split("?")[0]
-        
         conn = psycopg.connect(url)
         return PostgresConnectionAdapter(conn)
 
@@ -52,26 +68,12 @@ psycopg2 = psycopg2_mock
 DictCursor = "DictCursor"
 
 # -------------------------------------------------------------------------
-# ここからメイン処理
+# データベース操作関数
 # -------------------------------------------------------------------------
-app = Flask(__name__)
-app.config['SECRET_KEY'] = os.environ.get('SECRET_KEY', 'meet_backchat_secret_key')
-
-# ChatApp.py の初期化部分
-socketio = SocketIO(
-    app, 
-    cors_allowed_origins="*", 
-    async_mode="threading"  # これを必ず明記します
-)
-# 環境変数からデータベースURI（Supabaseなど）を取得
-SUPABASE_URL = os.environ.get('SUPABASE_URL')
-MAX_HISTORY = 100
-
 def get_db_connection():
     return psycopg2.connect(SUPABASE_URL)
 
 def init_db():
-    # ⚠️ Renderデプロイ時、SUPABASE_URLが設定されるまで初期化をスキップして起動エラーを防ぐ
     if not SUPABASE_URL:
         print("Warning: SUPABASE_URL is not set. Skipping database initialization.")
         return
@@ -92,6 +94,8 @@ def init_db():
         conn.close()
 
 def save_message(user, msg, time, sender_id):
+    if not SUPABASE_URL:
+        return
     conn = get_db_connection()
     try:
         with conn.cursor() as cursor:
@@ -112,6 +116,8 @@ def save_message(user, msg, time, sender_id):
         conn.close()
 
 def get_history():
+    if not SUPABASE_URL:
+        return []
     conn = get_db_connection()
     history = []
     try:
@@ -120,9 +126,9 @@ def get_history():
             rows = cursor.fetchall()
             for row in reversed(rows):
                 history.append({
-                    'user': row['username'],
+                    'name': row['username'],   # クライアント側の期待するキー 'name' に統一
                     'msg': row['msg'],
-                    'time': row['time_str'],
+                    'timestamp': row['time_str'], # クライアント側の期待するキー 'timestamp' に統一
                     'sender_id': row['sender_id']
                 })
     except Exception as e:
@@ -131,13 +137,13 @@ def get_history():
         conn.close()
     return history
 
-# データベースの初期化実行
+# データベースの初期化
 init_db()
+
 # -------------------------------------------------------------------------
-# Completely English & Accessibility-friendly HTML Template (V3)
-# - Fixed: Persistent 100-message history via LocalStorage
-# - Fixed: Centered settings modal display
-# - Removed: Main screen password/auth area
+# Completely English & Accessibility-friendly HTML Template (V4)
+# - 名前・タイムスタンプを青色にスタイル適用
+# - 送信された名前(Name)がAnonymousにならず適切に表示されるロジック
 # -------------------------------------------------------------------------
 HTML_TEMPLATE = """
 <!DOCTYPE html>
@@ -152,13 +158,15 @@ HTML_TEMPLATE = """
         body { font-family: sans-serif; max-width: 600px; margin: 20px auto; padding: 0 10px; position: relative; }
         .sr-only { position: absolute; width: 1px; height: 1px; padding: 0; margin: -1px; overflow: hidden; clip: rect(0,0,0,0); border: 0; }
         
-        /* チャットエリア（最初から表示） */
         #chat-area { display: block; }
         #chat-log { border: 2px solid #ccc; height: 400px; overflow-y: scroll; padding: 15px; margin-bottom: 15px; background: #f9f9f9; border-radius: 4px; }
         
         .message { margin-bottom: 10px; padding: 8px; border-bottom: 1px solid #eee; display: flex; flex-direction: column; }
-        .msg-meta { font-size: 0.85em; color: #666; margin-bottom: 4px; display: flex; gap: 8px; }
-        .timestamp { font-weight: normal; }
+        
+        /* 名前とタイムスタンプのエリアを青色（#0056b3）に指定して本文と区別 */
+        .msg-meta { font-size: 0.85em; color: #0056b3; margin-bottom: 4px; display: flex; gap: 8px; }
+        .msg-user { font-weight: bold; color: #0056b3; }
+        .timestamp { font-weight: normal; color: #0056b3; }
         
         .input-group { margin-bottom: 15px; }
         .checkbox-group { margin-bottom: 15px; display: flex; align-items: center; gap: 8px; }
@@ -172,14 +180,13 @@ HTML_TEMPLATE = """
         .welcome-container { display: flex; align-items: center; justify-content: space-between; margin-bottom: 10px; }
         .welcome-text { font-size: 1.1em; font-weight: bold; margin: 0; }
         
-        /* 歯車ボタンのスタイル */
         .settings-btn { background: none; border: none; padding: 4px; cursor: pointer; display: flex; align-items: center; justify-content: center; transition: transform 0.2s; }
         .settings-btn:hover { transform: rotate(45deg); }
         .settings-btn svg { width: 28px; height: 28px; fill: #333; }
         
         #history-status { color: #888; font-style: italic; margin: 5px 0 15px 0; }
 
-        /* 設定モーダル（画面中央にポップアップ表示されるよう修正） */
+        /* 設定モーダル */
         .modal { display: none; position: fixed; z-index: 100; left: 0; top: 0; width: 100%; height: 100%; background-color: rgba(0,0,0,0.5); }
         .modal-content { background-color: #fefefe; margin: 10% auto; padding: 20px; border: 1px solid #888; width: 85%; max-width: 400px; border-radius: 8px; box-shadow: 0 4px 15px rgba(0,0,0,0.2); }
         .modal-header { display: flex; justify-content: space-between; align-items: center; margin-bottom: 15px; }
@@ -199,7 +206,7 @@ HTML_TEMPLATE = """
             <p class="welcome-text">Welcome to the real-time chatroom for all GDG members..</p>
             <button id="settings-icon" class="settings-btn" title="Settings" aria-label="Open Settings">
                 <svg viewBox="0 0 24 24">
-                    <path d="M19.43 12.98c.04-.32.07-.64.07-.98s-.03-.66-.07-.98l2.11-1.65c.19-.15.24-.42.12-.64l-2-3.46c-.12-.22-.39-.3-.61-.22l-2.49 1c-.52-.4-1.08-.73-1.69-.98l-.38-2.65C14.46 2.18 14.25 2 14 2h-4c-.25 0-.46.18-.49.42l-.38 2.65c-.61.25-1.17.59-1.69.98l-2.49-1c-.23-.09-.49 0-.61.22l-2 3.46c-.13.22-.07.49.12.64l2.11 1.65c-.04.32-.07.65-.07.98s.03.66.07.98l-2.11 1.65c-.19.15-.24.42-.12.64l2 3.46c.12.22.39.3.61.22l2.49-1c.52.4 1.08.73 1.69.98l.38 2.65c.03.24.24.42.49.42h4c.25 0 .46-.18.49-.42l.38-2.65c.61-.25 1.17-.59 1.69-.98l2.49 1c.23.09.49 0 .61-.22l2-3.46c.12-.22.07-.49-.12-.64l-2.11-1.65zM12 15.5c-1.93 0-3.5-1.57-3.5-3.5s1.57-3.5 3.5-3.5 3.5 1.57 3.5 3.5-1.57 3.5-3.5 3.5z"/>
+                    <path d="M19.43 12.98c.04-.32.07-.64.07-.98s-.03-.66-.07-.98l2.11-1.65c.19-.15.24-.42.12-.64l-2-3.46c-.12-.22-.39-.3-.61-.22l-2.49 1c-.52-.4-1.08-.73-1.69-.98l-.38-2.65C14.46 2.18 14.25 2 14 2h-4c-.25 0-.46.18-.49.42l-.38 2.65c-.61.25-1.17.59-1.69.98l-2.49-1c-.23-.09-.49 0-.61.22l-2 3.46c-.13.22-.07.49.12.64l2.11 1.65c-.04.32-.07.65-.07.98s.03.66.07.98l-2.11 1.65c-.19.15-.24.42-.12.64l2 3.46c.12.22.39.3.61.22l2.49-1c.52.4 1.08.73(1.69-.98l.38-2.65c.03-.24.24-.42.49-.42h4c.25 0 .46.18.49.42l.38-2.65c.61-.25 1.17-.59 1.69-.98l2.49 1c.23.09.49 0 .61-.22l2-3.46c.12-.22.07-.49-.12-.64l-2.11-1.65zM12 15.5c-1.93 0-3.5-1.57-3.5-3.5s1.57-3.5 3.5-3.5 3.5 1.57 3.5 3.5-1.57 3.5-3.5 3.5z"/>
                 </svg>
             </button>
         </div>
@@ -241,15 +248,9 @@ HTML_TEMPLATE = """
 
     <script>
         const MAX_HISTORY = 100;
-        
-        // コネクション設定
-        const socket = io({
-            transports: ['polling']
-        });
+        const socket = io({ transports: ['polling'] });
 
-        // ページ読み込み時の処理（設定の適用 ＆ ローカル履歴の復元）
         window.addEventListener('DOMContentLoaded', () => {
-            // 1. 設定の復元
             const savedPassword = localStorage.getItem('chat_password') || '';
             const savedName = localStorage.getItem('chat_name') || '';
             const savedTimestamp = localStorage.getItem('chat_timestamp') === 'true';
@@ -258,17 +259,14 @@ HTML_TEMPLATE = """
             document.getElementById('settings-name').value = savedName;
             document.getElementById('settings-timestamp').checked = savedTimestamp;
 
-            // 2. ローカルから最大100件の履歴を復元して表示
             renderLocalHistory();
 
-            // ステータスメッセージの自動消去
             setTimeout(() => {
                 const statusMessage = document.getElementById('history-status');
                 if (statusMessage) statusMessage.remove();
             }, 1500);
         });
 
-        // 「Send」ボタンを押したときの処理
         document.getElementById('send-btn').addEventListener('click', () => {
             const input = document.getElementById('message-input');
             const message = input.value.trim();
@@ -276,38 +274,35 @@ HTML_TEMPLATE = """
             const password = localStorage.getItem('chat_password') || '';
             
             if (message !== "") {
-                // サーバー側に送信（必要に応じて password も送信データに含められます）
                 socket.emit('send_message', { 
                     msg: message, 
                     name: name,
+                    user: name,
+                    username: name,
                     password: password 
                 });
                 input.value = ''; 
             }
         });
 
-        // サーバー側の load_history イベント対応（既存互換）
         socket.on('load_history', function(history) {
             const statusMessage = document.getElementById('history-status');
             if (statusMessage) statusMessage.remove();
             
-            // サーバー側から配列で履歴データが届く仕様になっている場合は、
-            // ここでローカルストレージを上書きして再描画することも可能です。
             if (Array.isArray(history) && history.length > 0) {
                 const standardHistory = history.slice(-MAX_HISTORY).map(item => ({
-                    name: item.name || 'Anonymous',
-                    msg: item.msg || '',
-                    timestamp: item.timestamp || new Date().toISOString()
+                    name: item.name || item.user || item.username || 'Anonymous',
+                    msg: item.msg || item.message || '',
+                    timestamp: item.timestamp || item.time || new Date().toISOString()
                 }));
                 localStorage.setItem('chat_history_data', JSON.stringify(standardHistory));
                 renderLocalHistory();
             }
         });
 
-        // 日付フォーマット関数 (yyyy/mm/dd hh:mm)
         function formatTimestamp(dateStr) {
             const date = dateStr ? new Date(dateStr) : new Date();
-            if (isNaN(date.getTime())) return dateStr; // パースできない場合はそのまま返す
+            if (isNaN(date.getTime())) return dateStr;
             
             const yyyy = date.getFullYear();
             const mm = String(date.getMonth() + 1).padStart(2, '0');
@@ -318,7 +313,6 @@ HTML_TEMPLATE = """
             return `${yyyy}/${mm}/${dd} ${hh}:${min}`;
         }
 
-        // メッセージオブジェクトを元にHTML要素を作成する共通関数
         function createMessageElement(data) {
             const messageElement = document.createElement('div');
             messageElement.classList.add('message');
@@ -326,13 +320,11 @@ HTML_TEMPLATE = """
             const metaElement = document.createElement('div');
             metaElement.classList.add('msg-meta');
             
-            // 名前の表示
             const nameSpan = document.createElement('span');
-            nameSpan.style.fontWeight = 'bold';
+            nameSpan.classList.add('msg-user');
             nameSpan.textContent = data.name || 'Anonymous';
             metaElement.appendChild(nameSpan);
 
-            // タイムスタンプの設定（チェックが入っている場合のみ表示）
             const showTimestamp = localStorage.getItem('chat_timestamp') === 'true';
             if (showTimestamp) {
                 const timeSpan = document.createElement('span');
@@ -343,18 +335,17 @@ HTML_TEMPLATE = """
             
             messageElement.appendChild(metaElement);
 
-            // 本文
             const textElement = document.createElement('span');
+            textElement.style.color = '#333';
             textElement.textContent = data.msg;
             messageElement.appendChild(textElement);
             
             return messageElement;
         }
 
-        // ローカルに保存されている履歴データ（最大100件）を一括描画する関数
         function renderLocalHistory() {
             const chatLog = document.getElementById('chat-log');
-            chatLog.innerHTML = ''; // 一旦クリア
+            chatLog.innerHTML = '';
             
             const historyLog = JSON.parse(localStorage.getItem('chat_history_data')) || [];
             historyLog.forEach(data => {
@@ -364,33 +355,29 @@ HTML_TEMPLATE = """
             chatLog.scrollTop = chatLog.scrollHeight;
         }
 
-        // サーバーから新しいメッセージを受け取った時の処理
         socket.on('receive_message', function(data) {
             const chatLog = document.getElementById('chat-log');
+            const incomingName = data.name || data.user || data.username || 'Anonymous';
             
-            // データの正規化（タイムスタンプがない場合は現在の時刻を付与）
             const messageData = {
-                name: data.name || 'Anonymous',
-                msg: data.msg || '',
-                timestamp: data.timestamp || new Date().toISOString()
+                name: incomingName,
+                msg: data.msg || data.message || '',
+                timestamp: data.timestamp || data.time || new Date().toISOString()
             };
 
-            // 1. 新しいメッセージを画面に追加
             const elem = createMessageElement(messageData);
             chatLog.appendChild(elem);
             chatLog.scrollTop = chatLog.scrollHeight;
 
-            // 2. ローカルストレージの履歴データを更新（最大100件をキープ）
             let historyLog = JSON.parse(localStorage.getItem('chat_history_data')) || [];
             historyLog.push(messageData);
             
             if (historyLog.length > MAX_HISTORY) {
-                historyLog = historyLog.slice(-MAX_HISTORY); // 最新の100件のみ残す
+                historyLog = historyLog.slice(-MAX_HISTORY);
             }
             localStorage.setItem('chat_history_data', JSON.stringify(historyLog));
         });
 
-        // モーダル設定画面の開閉制御
         const modal = document.getElementById('settings-modal');
         
         document.getElementById('settings-icon').addEventListener('click', function() {
@@ -404,55 +391,67 @@ HTML_TEMPLATE = """
         }
 
         document.getElementById('close-modal-btn').addEventListener('click', closeModal);
-        
         window.addEventListener('click', function(event) {
-            if (event.target === modal) {
-                closeModal();
-            }
+            if (event.target === modal) closeModal();
         });
 
-        // 設定の保存ボタン処理
         document.getElementById('save-settings-btn').addEventListener('click', function() {
             const pwd = document.getElementById('settings-password').value;
             const name = document.getElementById('settings-name').value;
             const timestampChecked = document.getElementById('settings-timestamp').checked;
 
-            // 設定値をローカルに即時保存
             localStorage.setItem('chat_password', pwd);
             localStorage.setItem('chat_name', name);
             localStorage.setItem('chat_timestamp', timestampChecked);
 
-            // 設定変更（特にタイムスタンプのON/OFF）を現在のチャットログに反映させるため再描画
             renderLocalHistory();
-
             alert("Settings saved!");
             closeModal();
         });
     </script>
 </body>
 </html>
-# """
+"""
 
-
-# 既存の初期化コード
-socketio = SocketIO(app, cors_allowed_origins="*")
-
-# ==========================================
-# 【追加】メッセージを受信して全員に配信する処理
-# ==========================================
-@socketio.on('send_message')
-def handle_send_message_event(data):
-    # JavaScriptから送られてきたメッセージ（data['msg']）を取り出す
-    message_text = data.get('msg', '')
-    
-    # 届いたメッセージを、接続している全員の画面に送り返す
-    # ※ JavaScript側の socket.on('receive_message', ...) がこれをキャッチします
-    socketio.emit('receive_message', {'msg': message_text})
+# -------------------------------------------------------------------------
+# Flask ルーティング定義
+# -------------------------------------------------------------------------
 @app.route('/')
 def index():
     return render_template_string(HTML_TEMPLATE)
 
+# -------------------------------------------------------------------------
+# Socket.IO イベントハンドラ定義（バックエンド処理の実装）
+# -------------------------------------------------------------------------
+@socketio.on('connect')
+def handle_connect():
+    """ユーザー接続時に、Supabaseから最新100件の履歴を取得して一斉送信する"""
+    history = get_history()
+    emit('load_history', history)
+
+@socketio.on('send_message')
+def handle_send_message(data):
+    """メッセージを受信し、DBへの保存と全クライアントへのリアルタイムブロードキャストを行う"""
+    # フロントエンドから送られてくる可能性のある各種キー名を柔軟にフォールバック
+    msg_content = data.get('msg') or data.get('message', '')
+    user_name = data.get('name') or data.get('user') or data.get('username', 'Anonymous')
+    
+    # メッセージにサーバー側でのタイムスタンプ（ISOフォーマット）を付与
+    current_time = datetime.utcnow().isoformat() + 'Z'
+    sender_id = data.get('password', '') # 部屋のパスワードなどを識別子として利用
+    
+    # データベースへの非同期保存
+    save_message(user_name, msg_content, current_time, sender_id)
+    
+    # 接続中の全員（自分を含む）にメッセージをリレー転送
+    emit('receive_message', {
+        'name': user_name,
+        'msg': msg_content,
+        'timestamp': current_time,
+        'sender_id': sender_id
+    }, broadcast=True)
+
+# アプリケーションの起動（Renderなど外部公開用に0.0.0.0ポートを指定）
 if __name__ == '__main__':
-    # Render本番環境でポートを動的に取得して起動できるように最適化
     port = int(os.environ.get("PORT", 5000))
-    socketio.run(app, host='0.0.0.0', port=port, debug=True, allow_unsafe_werkzeug=True)
+    socketio.run(app, host='0.0.0.0', port=port)
