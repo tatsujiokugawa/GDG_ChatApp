@@ -57,8 +57,12 @@ DictCursor = "DictCursor"
 app = Flask(__name__)
 app.config['SECRET_KEY'] = os.environ.get('SECRET_KEY', 'meet_backchat_secret_key')
 
-socketio = SocketIO(app, cors_allowed_origins="*")
-
+# ChatApp.py の初期化部分
+socketio = SocketIO(
+    app, 
+    cors_allowed_origins="*", 
+    async_mode="threading"  # これを必ず明記します
+)
 # 環境変数からデータベースURI（Supabaseなど）を取得
 SUPABASE_URL = os.environ.get('SUPABASE_URL')
 MAX_HISTORY = 100
@@ -193,34 +197,11 @@ HTML_TEMPLATE = """
     </main>
 
     <script>
-        # const socket = io();
-
-        # document.getElementById('login-btn').addEventListener('click', () => {
-        #     document.getElementById('auth-area').style.display = 'none';
-        #     document.getElementById('chat-area').style.display = 'block';
-            
-        #     setTimeout(() => {
-        #         const statusMessage = document.getElementById('history-status');
-        #         if (statusMessage) {
-        #             statusMessage.remove();
-        #         }
-        #     }, 1500);
-        # });
-
-        # socket.on('load_history', function(history) {
-        #     const chatLog = document.getElementById('chat-log');
-        #     const statusMessage = document.getElementById('history-status');
-        #     if (statusMessage) {
-        #         statusMessage.remove();
-        #     }
-        # });
-
-        # document.getElementById('settings-icon').addEventListener('click', function() {
-        #     console.log("Settings icon clicked.");
-        #     alert("*** Under Construction; To be built by July 11th ***");
-        # });
-        <script>
-        const socket = io();
+        // const socket = io();
+        // 接続方式を「polling（ポーリング）」限定に強制指定します
+        const socket = io({
+            transports: ['polling']
+        });
 
         // ログイン（入室）ボタンの処理
         document.getElementById('login-btn').addEventListener('click', () => {
@@ -281,6 +262,20 @@ HTML_TEMPLATE = """
 </html>
 """
 
+# 既存の初期化コード
+socketio = SocketIO(app, cors_allowed_origins="*")
+
+# ==========================================
+# 【追加】メッセージを受信して全員に配信する処理
+# ==========================================
+@socketio.on('send_message')
+def handle_send_message_event(data):
+    # JavaScriptから送られてきたメッセージ（data['msg']）を取り出す
+    message_text = data.get('msg', '')
+    
+    # 届いたメッセージを、接続している全員の画面に送り返す
+    # ※ JavaScript側の socket.on('receive_message', ...) がこれをキャッチします
+    socketio.emit('receive_message', {'msg': message_text})
 @app.route('/')
 def index():
     return render_template_string(HTML_TEMPLATE)
