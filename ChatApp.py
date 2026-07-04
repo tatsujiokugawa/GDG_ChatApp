@@ -180,10 +180,22 @@ HTML_TEMPLATE = """
         .welcome-container { display: flex; align-items: center; justify-content: space-between; margin-bottom: 10px; }
         .welcome-text { font-size: 1.1em; font-weight: bold; margin: 0; }
         
-        .settings-btn { background: none; border: none; padding: 4px; cursor: pointer; display: flex; align-items: center; justify-content: center; transition: transform 0.2s; }
-        .settings-btn:hover { transform: rotate(45deg); }
-        .settings-btn svg { width: 28px; height: 28px; fill: #333; }
-        
+        # .settings-btn { background: none; border: none; padding: 4px; cursor: pointer; display: flex; align-items: center; justify-content: center; transition: transform 0.2s; }
+        # .settings-btn:hover { transform: rotate(45deg); }
+        # .settings-btn svg { width: 28px; height: 28px; fill: #333; }
+        .settings-btn { 
+            background: none; 
+            border: none; 
+            padding: 0;          /* 余計な余白を削る */
+            cursor: pointer; 
+            display: inline-flex; /* 内部のSVGを中央に正しく配置 */
+            align-items: center; 
+            justify-content: center; 
+            transition: transform 0.2s; 
+            width: 32px;         /* ボタン自体の幅を明示 */
+            height: 32px;        /* ボタン自体の高さを明示 */
+            overflow: visible;   /* はみ出しによるカットを防ぐ */
+}
         #history-status { color: #888; font-style: italic; margin: 5px 0 15px 0; }
 
         /* 設定モーダル */
