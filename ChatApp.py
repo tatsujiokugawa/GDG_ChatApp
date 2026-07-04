@@ -193,8 +193,36 @@ HTML_TEMPLATE = """
     </main>
 
     <script>
+        # const socket = io();
+
+        # document.getElementById('login-btn').addEventListener('click', () => {
+        #     document.getElementById('auth-area').style.display = 'none';
+        #     document.getElementById('chat-area').style.display = 'block';
+            
+        #     setTimeout(() => {
+        #         const statusMessage = document.getElementById('history-status');
+        #         if (statusMessage) {
+        #             statusMessage.remove();
+        #         }
+        #     }, 1500);
+        # });
+
+        # socket.on('load_history', function(history) {
+        #     const chatLog = document.getElementById('chat-log');
+        #     const statusMessage = document.getElementById('history-status');
+        #     if (statusMessage) {
+        #         statusMessage.remove();
+        #     }
+        # });
+
+        # document.getElementById('settings-icon').addEventListener('click', function() {
+        #     console.log("Settings icon clicked.");
+        #     alert("*** Under Construction; To be built by July 11th ***");
+        # });
+        <script>
         const socket = io();
 
+        // ログイン（入室）ボタンの処理
         document.getElementById('login-btn').addEventListener('click', () => {
             document.getElementById('auth-area').style.display = 'none';
             document.getElementById('chat-area').style.display = 'block';
@@ -207,6 +235,20 @@ HTML_TEMPLATE = """
             }, 1500);
         });
 
+        // 【追加】「Send」ボタンを押したときにメッセージをサーバーへ送信する処理
+        document.getElementById('send-btn').addEventListener('click', () => {
+            const input = document.getElementById('message-input');
+            const message = input.value.trim();
+            
+            if (message !== "") {
+                // サーバー側の @socketio.on('send_message') にデータを送る
+                // ※イベント名（'send_message'）はPython側と一致させる必要があります
+                socket.emit('send_message', { msg: message });
+                input.value = ''; // 入力欄をクリア
+            }
+        });
+
+        // 履歴読み込み時の処理（既存）
         socket.on('load_history', function(history) {
             const chatLog = document.getElementById('chat-log');
             const statusMessage = document.getElementById('history-status');
@@ -215,6 +257,21 @@ HTML_TEMPLATE = """
             }
         });
 
+        // 【追加】サーバーから新しいメッセージを受け取って画面に表示する処理
+        socket.on('receive_message', function(data) {
+            const chatLog = document.getElementById('chat-log');
+            const messageElement = document.createElement('div');
+            messageElement.classList.add('message');
+            
+            // 届いたメッセージを画面に追加
+            messageElement.textContent = data.msg; 
+            chatLog.appendChild(messageElement);
+            
+            // チャットログを最下部までスクロール
+            chatLog.scrollTop = chatLog.scrollHeight;
+        });
+
+        // 設定アイコン（既存）
         document.getElementById('settings-icon').addEventListener('click', function() {
             console.log("Settings icon clicked.");
             alert("*** Under Construction; To be built by July 11th ***");
