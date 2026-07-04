@@ -135,7 +135,7 @@ def get_history():
 init_db()
 
 # -------------------------------------------------------------------------
-# Completely English & Accessibility-friendly HTML Template
+# Completely English & Accessibility-friendly HTML Template with Settings
 # -------------------------------------------------------------------------
 HTML_TEMPLATE = """
 <!DOCTYPE html>
@@ -147,12 +147,15 @@ HTML_TEMPLATE = """
     <script src="https://cdn.socket.io/4.7.5/socket.io.min.js"></script>
     
     <style>
-        body { font-family: sans-serif; max-width: 600px; margin: 20px auto; padding: 0 10px; }
+        body { font-family: sans-serif; max-width: 600px; margin: 20px auto; padding: 0 10px; position: relative; }
         .sr-only { position: absolute; width: 1px; height: 1px; padding: 0; margin: -1px; overflow: hidden; clip: rect(0,0,0,0); border: 0; }
         #chat-log { border: 2px solid #ccc; height: 400px; overflow-y: scroll; padding: 15px; margin-bottom: 15px; background: #f9f9f9; }
-        .message { margin-bottom: 10px; padding: 8px; border-bottom: 1px solid #eee; }
-        .timestamp { color: #666; font-size: 0.9em; margin-left: 5px; margin-right: 5px; }
+        .message { margin-bottom: 10px; padding: 8px; border-bottom: 1px solid #eee; display: flex; flex-direction: column; }
+        .msg-meta { font-size: 0.85em; color: #666; margin-bottom: 4px; display: flex; gap: 8px; }
+        .timestamp { font-weight: normal; }
         .input-group { margin-bottom: 15px; }
+        .checkbox-group { margin-bottom: 15px; display: flex; align-items: center; gap: 8px; }
+        .checkbox-group label { margin-bottom: 0; font-weight: bold; }
         label { display: block; font-weight: bold; margin-bottom: 5px; }
         input[type="text"], input[type="password"] { width: 100%; padding: 10px; font-size: 16px; box-sizing: border-box; }
         button { padding: 10px 20px; font-size: 16px; cursor: pointer; background: #007bff; color: white; border: none; border-radius: 4px; }
@@ -161,9 +164,23 @@ HTML_TEMPLATE = """
         
         .welcome-container { display: flex; align-items: center; justify-content: space-between; margin-bottom: 10px; }
         .welcome-text { font-size: 1.1em; font-weight: bold; margin: 0; }
-        .settings-btn { cursor: pointer; font-size: 24px; user-select: none; transition: transform 0.2s; }
+        
+        /* 歯車SVGボタンのスタイル */
+        .settings-btn { background: none; border: none; padding: 4px; cursor: pointer; display: flex; align-items: center; justify-content: center; transition: transform 0.2s; }
         .settings-btn:hover { transform: rotate(45deg); }
+        .settings-btn svg { width: 28px; height: 28px; fill: #333; }
+        
         #history-status { color: #888; font-style: italic; margin: 5px 0 15px 0; }
+
+        /* 設定モーダルのスタイル */
+        .modal { display: none; position: fixed; z-index: 100; left: 0; top: 0; width: 100%; height: 100%; background-color: rgba(0,0,0,0.4); }
+        .modal-content { background-color: #fefefe; margin: 15% auto; padding: 20px; border: 1px solid #888; width: 80%; max-width: 400px; border-radius: 8px; }
+        .modal-header { display: flex; justify-content: space-between; align-items: center; margin-bottom: 15px; }
+        .modal-header h2 { margin: 0; font-size: 1.3em; }
+        .close-btn { font-size: 28px; font-weight: bold; cursor: pointer; background: none; border: none; color: #aaa; padding: 0; }
+        .close-btn:hover { color: #000; }
+        .modal-actions { display: flex; justify-content: flex-end; gap: 10px; margin-top: 20px; }
+        .btn-secondary { background: #6c757d; }
     </style>
 </head>
 <body>
@@ -174,7 +191,11 @@ HTML_TEMPLATE = """
     <main>
         <div class="welcome-container">
             <p class="welcome-text">Welcome to the real-time chatroom for all GDG members..</p>
-            <span id="settings-icon" class="settings-btn" title="Settings">⚙</span>
+            <button id="settings-icon" class="settings-btn" title="Settings" aria-label="Open Settings">
+                <svg viewBox="0 0 24 24">
+                    <path d="M19.43 12.98c.04-.32.07-.64.07-.98s-.03-.66-.07-.98l2.11-1.65c.19-.15.24-.42.12-.64l-2-3.46c-.12-.22-.39-.3-.61-.22l-2.49 1c-.52-.4-1.08-.73-1.69-.98l-.38-2.65C14.46 2.18 14.25 2 14 2h-4c-.25 0-.46.18-.49.42l-.38 2.65c-.61.25-1.17.59-1.69.98l-2.49-1c-.23-.09-.49 0-.61.22l-2 3.46c-.13.22-.07.49.12.64l2.11 1.65c-.04.32-.07.65-.07.98s.03.66.07.98l-2.11 1.65c-.19.15-.24.42-.12.64l2 3.46c.12.22.39.3.61.22l2.49-1c.52.4 1.08.73 1.69.98l.38 2.65c.03.24.24.42.49.42h4c.25 0 .46-.18.49-.42l.38-2.65c.61-.25 1.17-.59 1.69-.98l2.49 1c.23.09.49 0 .61-.22l2-3.46c.12-.22.07-.49-.12-.64l-2.11-1.65zM12 15.5c-1.93 0-3.5-1.57-3.5-3.5s1.57-3.5 3.5-3.5 3.5 1.57 3.5 3.5-1.57 3.5-3.5 3.5z"/>
+                </svg>
+            </button>
         </div>
 
         <p id="history-status">System: History being loaded.</p>
@@ -196,15 +217,55 @@ HTML_TEMPLATE = """
         </div>
     </main>
 
+    <div id="settings-modal" class="modal" role="dialog" aria-labelledby="modal-title" aria-hidden="true">
+        <div class="modal-content">
+            <div class="modal-header">
+                <h2 id="modal-title">Settings</h2>
+                <button class="close-btn" id="close-modal-btn" aria-label="Close Settings">&times;</button>
+            </div>
+            <div class="input-group">
+                <label for="settings-password">Password</label>
+                <input type="password" id="settings-password" placeholder="Room password">
+            </div>
+            <div class="input-group">
+                <label for="settings-name">Name</label>
+                <input type="text" id="settings-name" placeholder="Your name">
+            </div>
+            <div class="checkbox-group">
+                <input type="checkbox" id="settings-timestamp">
+                <label for="settings-timestamp">Timestamp</label>
+            </div>
+            <div class="modal-actions">
+                <button id="save-settings-btn">Save</button>
+            </div>
+        </div>
+    </div>
+
     <script>
-        // const socket = io();
-        // 接続方式を「polling（ポーリング）」限定に強制指定します
+        // コネクション設定
         const socket = io({
             transports: ['polling']
         });
 
+        // ページ読み込み時に保存された設定を適用
+        window.addEventListener('DOMContentLoaded', () => {
+            const savedPassword = localStorage.getItem('chat_password') || '';
+            const savedName = localStorage.getItem('chat_name') || '';
+            const savedTimestamp = localStorage.getItem('chat_timestamp') === 'true'; // 初期値はfalseになる
+
+            // 各インプットに値をセット
+            document.getElementById('password').value = savedPassword;
+            document.getElementById('settings-password').value = savedPassword;
+            document.getElementById('settings-name').value = savedName;
+            document.getElementById('settings-timestamp').checked = savedTimestamp;
+        });
+
         // ログイン（入室）ボタンの処理
         document.getElementById('login-btn').addEventListener('click', () => {
+            const pwd = document.getElementById('password').value;
+            localStorage.setItem('chat_password', pwd); // ログイン時にもパスワードを保存
+            document.getElementById('settings-password').value = pwd;
+
             document.getElementById('auth-area').style.display = 'none';
             document.getElementById('chat-area').style.display = 'block';
             
@@ -216,20 +277,20 @@ HTML_TEMPLATE = """
             }, 1500);
         });
 
-        // 【追加】「Send」ボタンを押したときにメッセージをサーバーへ送信する処理
+        // 「Send」ボタンを押したときの処理
         document.getElementById('send-btn').addEventListener('click', () => {
             const input = document.getElementById('message-input');
             const message = input.value.trim();
+            const name = localStorage.getItem('chat_name') || 'Anonymous';
             
             if (message !== "") {
-                // サーバー側の @socketio.on('send_message') にデータを送る
-                // ※イベント名（'send_message'）はPython側と一致させる必要があります
-                socket.emit('send_message', { msg: message });
-                input.value = ''; // 入力欄をクリア
+                // サーバー側に名前(name)も含めて送信する構成を想定
+                socket.emit('send_message', { msg: message, name: name });
+                input.value = ''; 
             }
         });
 
-        // 履歴読み込み時の処理（既存）
+        // 履歴読み込み時の処理
         socket.on('load_history', function(history) {
             const chatLog = document.getElementById('chat-log');
             const statusMessage = document.getElementById('history-status');
@@ -238,24 +299,94 @@ HTML_TEMPLATE = """
             }
         });
 
-        // 【追加】サーバーから新しいメッセージを受け取って画面に表示する処理
+        // 日付フォーマット関数 (yyyy/mm/dd hh:mm)
+        function formatTimestamp(dateStr) {
+            // サーバーから渡る日付オブジェクト、または文字列をパース
+            const date = dateStr ? new Date(dateStr) : new Date();
+            const yyyy = date.getFullYear();
+            const mm = String(date.getMonth() + 1).padStart(2, '0');
+            const dd = String(date.getDate()).padStart(2, '0');
+            const hh = String(date.getHours()).padStart(2, '0');
+            const min = String(date.getMinutes()).padStart(2, '0');
+            
+            return `${yyyy}/${mm}/${dd} ${hh}:${min}`;
+        }
+
+        // サーバーから新しいメッセージを受け取って画面に表示する処理
         socket.on('receive_message', function(data) {
             const chatLog = document.getElementById('chat-log');
             const messageElement = document.createElement('div');
             messageElement.classList.add('message');
             
-            // 届いたメッセージを画面に追加
-            messageElement.textContent = data.msg; 
-            chatLog.appendChild(messageElement);
+            // メタデータ（名前、タイムスタンプ）格納用の要素
+            const metaElement = document.createElement('div');
+            metaElement.classList.add('msg-meta');
             
-            // チャットログを最下部までスクロール
+            // 名前の表示
+            const nameSpan = document.createElement('span');
+            nameSpan.style.fontWeight = 'bold';
+            nameSpan.textContent = data.name || 'Anonymous';
+            metaElement.appendChild(nameSpan);
+
+            // タイムスタンプの設定（チェックが入っている場合のみ表示）
+            const showTimestamp = localStorage.getItem('chat_timestamp') === 'true';
+            if (showTimestamp) {
+                const timeSpan = document.createElement('span');
+                timeSpan.classList.add('timestamp');
+                // data.timestamp があればそれを使用、無ければ現在の時刻をフォーマット
+                timeSpan.textContent = formatTimestamp(data.timestamp);
+                metaElement.appendChild(timeSpan);
+            }
+            
+            messageElement.appendChild(metaElement);
+
+            // メッセージ本文の追加
+            const textElement = document.createElement('span');
+            textElement.textContent = data.msg;
+            messageElement.appendChild(textElement);
+            
+            chatLog.appendChild(messageElement);
             chatLog.scrollTop = chatLog.scrollHeight;
         });
 
-        // 設定アイコン（既存）
+        // モーダル設定画面の開閉制御
+        const modal = document.getElementById('settings-modal');
+        
         document.getElementById('settings-icon').addEventListener('click', function() {
-            console.log("Settings icon clicked.");
-            alert("*** Under Construction; To be built by July 11th ***");
+            modal.style.display = 'block';
+            modal.setAttribute('aria-hidden', 'false');
+        });
+
+        function closeModal() {
+            modal.style.display = 'none';
+            modal.setAttribute('aria-hidden', 'true');
+        }
+
+        document.getElementById('close-modal-btn').addEventListener('click', closeModal);
+        
+        // モーダルの外側をクリックしたときも閉じる
+        window.addEventListener('click', function(event) {
+            if (event.target === modal) {
+                closeModal();
+            }
+        });
+
+        // 設定の保存ボタン処理
+        document.getElementById('save-settings-btn').addEventListener('click', function() {
+            const pwd = document.getElementById('settings-password').value;
+            const name = document.getElementById('settings-name').value;
+            const timestampChecked = document.getElementById('settings-timestamp').checked;
+
+            // ローカルストレージに保存
+            localStorage.setItem('chat_password', pwd);
+            localStorage.setItem('chat_name', name);
+            localStorage.setItem('chat_timestamp', timestampChecked);
+
+            // メイン画面のパスワードフィールドにも同期
+            document.getElementById('password').value = pwd;
+
+            alert("Settings saved!");
+            closeModal();
         });
     </script>
 </body>
