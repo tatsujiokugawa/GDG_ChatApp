@@ -182,7 +182,7 @@ HTML_TEMPLATE = """
         
         # .settings-btn { background: none; border: none; padding: 4px; cursor: pointer; display: flex; align-items: center; justify-content: center; transition: transform 0.2s; }
         # .settings-btn:hover { transform: rotate(45deg); }
-        # .settings-btn svg { width: 28px; height: 28px; fill: #333; }
+        # .settings-btn svg { width: 18px; height: 18px; fill: #333; }
         .settings-btn { 
             background: none; 
             border: none; 
