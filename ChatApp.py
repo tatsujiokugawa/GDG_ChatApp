@@ -133,9 +133,11 @@ def get_history():
 
 # データベースの初期化実行
 init_db()
-
 # -------------------------------------------------------------------------
-# Completely English & Accessibility-friendly HTML Template with Settings
+# Completely English & Accessibility-friendly HTML Template (V3)
+# - Fixed: Persistent 100-message history via LocalStorage
+# - Fixed: Centered settings modal display
+# - Removed: Main screen password/auth area
 # -------------------------------------------------------------------------
 HTML_TEMPLATE = """
 <!DOCTYPE html>
@@ -149,38 +151,42 @@ HTML_TEMPLATE = """
     <style>
         body { font-family: sans-serif; max-width: 600px; margin: 20px auto; padding: 0 10px; position: relative; }
         .sr-only { position: absolute; width: 1px; height: 1px; padding: 0; margin: -1px; overflow: hidden; clip: rect(0,0,0,0); border: 0; }
-        #chat-log { border: 2px solid #ccc; height: 400px; overflow-y: scroll; padding: 15px; margin-bottom: 15px; background: #f9f9f9; }
+        
+        /* チャットエリア（最初から表示） */
+        #chat-area { display: block; }
+        #chat-log { border: 2px solid #ccc; height: 400px; overflow-y: scroll; padding: 15px; margin-bottom: 15px; background: #f9f9f9; border-radius: 4px; }
+        
         .message { margin-bottom: 10px; padding: 8px; border-bottom: 1px solid #eee; display: flex; flex-direction: column; }
         .msg-meta { font-size: 0.85em; color: #666; margin-bottom: 4px; display: flex; gap: 8px; }
         .timestamp { font-weight: normal; }
+        
         .input-group { margin-bottom: 15px; }
         .checkbox-group { margin-bottom: 15px; display: flex; align-items: center; gap: 8px; }
         .checkbox-group label { margin-bottom: 0; font-weight: bold; }
         label { display: block; font-weight: bold; margin-bottom: 5px; }
-        input[type="text"], input[type="password"] { width: 100%; padding: 10px; font-size: 16px; box-sizing: border-box; }
+        
+        input[type="text"], input[type="password"] { width: 100%; padding: 10px; font-size: 16px; box-sizing: border-box; border: 1px solid #ccc; border-radius: 4px; }
         button { padding: 10px 20px; font-size: 16px; cursor: pointer; background: #007bff; color: white; border: none; border-radius: 4px; }
-        #auth-area { background: #f0f0f0; padding: 20px; border-radius: 8px; margin-bottom: 20px; border: 1px solid #ddd; }
-        #chat-area { display: none; }
+        button:hover { background: #0056b3; }
         
         .welcome-container { display: flex; align-items: center; justify-content: space-between; margin-bottom: 10px; }
         .welcome-text { font-size: 1.1em; font-weight: bold; margin: 0; }
         
-        /* 歯車SVGボタンのスタイル */
+        /* 歯車ボタンのスタイル */
         .settings-btn { background: none; border: none; padding: 4px; cursor: pointer; display: flex; align-items: center; justify-content: center; transition: transform 0.2s; }
         .settings-btn:hover { transform: rotate(45deg); }
         .settings-btn svg { width: 28px; height: 28px; fill: #333; }
         
         #history-status { color: #888; font-style: italic; margin: 5px 0 15px 0; }
 
-        /* 設定モーダルのスタイル */
-        .modal { display: none; position: fixed; z-index: 100; left: 0; top: 0; width: 100%; height: 100%; background-color: rgba(0,0,0,0.4); }
-        .modal-content { background-color: #fefefe; margin: 15% auto; padding: 20px; border: 1px solid #888; width: 80%; max-width: 400px; border-radius: 8px; }
+        /* 設定モーダル（画面中央にポップアップ表示されるよう修正） */
+        .modal { display: none; position: fixed; z-index: 100; left: 0; top: 0; width: 100%; height: 100%; background-color: rgba(0,0,0,0.5); }
+        .modal-content { background-color: #fefefe; margin: 10% auto; padding: 20px; border: 1px solid #888; width: 85%; max-width: 400px; border-radius: 8px; box-shadow: 0 4px 15px rgba(0,0,0,0.2); }
         .modal-header { display: flex; justify-content: space-between; align-items: center; margin-bottom: 15px; }
         .modal-header h2 { margin: 0; font-size: 1.3em; }
-        .close-btn { font-size: 28px; font-weight: bold; cursor: pointer; background: none; border: none; color: #aaa; padding: 0; }
+        .close-btn { font-size: 28px; font-weight: bold; cursor: pointer; background: none; border: none; color: #aaa; padding: 0; line-height: 1; }
         .close-btn:hover { color: #000; }
         .modal-actions { display: flex; justify-content: flex-end; gap: 10px; margin-top: 20px; }
-        .btn-secondary { background: #6c757d; }
     </style>
 </head>
 <body>
@@ -199,14 +205,6 @@ HTML_TEMPLATE = """
         </div>
 
         <p id="history-status">System: History being loaded.</p>
-
-        <div id="auth-area">
-            <div class="input-group">
-                <label for="password">Password</label>
-                <input type="password" id="password" placeholder="Enter room password">
-            </div>
-            <button id="login-btn">Join Chat</button>
-        </div>
 
         <div id="chat-area">
             <div id="chat-log" role="log" aria-live="polite"></div>
@@ -242,38 +240,31 @@ HTML_TEMPLATE = """
     </div>
 
     <script>
+        const MAX_HISTORY = 100;
+        
         // コネクション設定
         const socket = io({
             transports: ['polling']
         });
 
-        // ページ読み込み時に保存された設定を適用
+        // ページ読み込み時の処理（設定の適用 ＆ ローカル履歴の復元）
         window.addEventListener('DOMContentLoaded', () => {
+            // 1. 設定の復元
             const savedPassword = localStorage.getItem('chat_password') || '';
             const savedName = localStorage.getItem('chat_name') || '';
-            const savedTimestamp = localStorage.getItem('chat_timestamp') === 'true'; // 初期値はfalseになる
+            const savedTimestamp = localStorage.getItem('chat_timestamp') === 'true';
 
-            // 各インプットに値をセット
-            document.getElementById('password').value = savedPassword;
             document.getElementById('settings-password').value = savedPassword;
             document.getElementById('settings-name').value = savedName;
             document.getElementById('settings-timestamp').checked = savedTimestamp;
-        });
 
-        // ログイン（入室）ボタンの処理
-        document.getElementById('login-btn').addEventListener('click', () => {
-            const pwd = document.getElementById('password').value;
-            localStorage.setItem('chat_password', pwd); // ログイン時にもパスワードを保存
-            document.getElementById('settings-password').value = pwd;
+            // 2. ローカルから最大100件の履歴を復元して表示
+            renderLocalHistory();
 
-            document.getElementById('auth-area').style.display = 'none';
-            document.getElementById('chat-area').style.display = 'block';
-            
+            // ステータスメッセージの自動消去
             setTimeout(() => {
                 const statusMessage = document.getElementById('history-status');
-                if (statusMessage) {
-                    statusMessage.remove();
-                }
+                if (statusMessage) statusMessage.remove();
             }, 1500);
         });
 
@@ -282,27 +273,42 @@ HTML_TEMPLATE = """
             const input = document.getElementById('message-input');
             const message = input.value.trim();
             const name = localStorage.getItem('chat_name') || 'Anonymous';
+            const password = localStorage.getItem('chat_password') || '';
             
             if (message !== "") {
-                // サーバー側に名前(name)も含めて送信する構成を想定
-                socket.emit('send_message', { msg: message, name: name });
+                // サーバー側に送信（必要に応じて password も送信データに含められます）
+                socket.emit('send_message', { 
+                    msg: message, 
+                    name: name,
+                    password: password 
+                });
                 input.value = ''; 
             }
         });
 
-        // 履歴読み込み時の処理
+        // サーバー側の load_history イベント対応（既存互換）
         socket.on('load_history', function(history) {
-            const chatLog = document.getElementById('chat-log');
             const statusMessage = document.getElementById('history-status');
-            if (statusMessage) {
-                statusMessage.remove();
+            if (statusMessage) statusMessage.remove();
+            
+            // サーバー側から配列で履歴データが届く仕様になっている場合は、
+            // ここでローカルストレージを上書きして再描画することも可能です。
+            if (Array.isArray(history) && history.length > 0) {
+                const standardHistory = history.slice(-MAX_HISTORY).map(item => ({
+                    name: item.name || 'Anonymous',
+                    msg: item.msg || '',
+                    timestamp: item.timestamp || new Date().toISOString()
+                }));
+                localStorage.setItem('chat_history_data', JSON.stringify(standardHistory));
+                renderLocalHistory();
             }
         });
 
         // 日付フォーマット関数 (yyyy/mm/dd hh:mm)
         function formatTimestamp(dateStr) {
-            // サーバーから渡る日付オブジェクト、または文字列をパース
             const date = dateStr ? new Date(dateStr) : new Date();
+            if (isNaN(date.getTime())) return dateStr; // パースできない場合はそのまま返す
+            
             const yyyy = date.getFullYear();
             const mm = String(date.getMonth() + 1).padStart(2, '0');
             const dd = String(date.getDate()).padStart(2, '0');
@@ -312,13 +318,11 @@ HTML_TEMPLATE = """
             return `${yyyy}/${mm}/${dd} ${hh}:${min}`;
         }
 
-        // サーバーから新しいメッセージを受け取って画面に表示する処理
-        socket.on('receive_message', function(data) {
-            const chatLog = document.getElementById('chat-log');
+        // メッセージオブジェクトを元にHTML要素を作成する共通関数
+        function createMessageElement(data) {
             const messageElement = document.createElement('div');
             messageElement.classList.add('message');
             
-            // メタデータ（名前、タイムスタンプ）格納用の要素
             const metaElement = document.createElement('div');
             metaElement.classList.add('msg-meta');
             
@@ -333,20 +337,57 @@ HTML_TEMPLATE = """
             if (showTimestamp) {
                 const timeSpan = document.createElement('span');
                 timeSpan.classList.add('timestamp');
-                // data.timestamp があればそれを使用、無ければ現在の時刻をフォーマット
                 timeSpan.textContent = formatTimestamp(data.timestamp);
                 metaElement.appendChild(timeSpan);
             }
             
             messageElement.appendChild(metaElement);
 
-            // メッセージ本文の追加
+            // 本文
             const textElement = document.createElement('span');
             textElement.textContent = data.msg;
             messageElement.appendChild(textElement);
             
-            chatLog.appendChild(messageElement);
+            return messageElement;
+        }
+
+        // ローカルに保存されている履歴データ（最大100件）を一括描画する関数
+        function renderLocalHistory() {
+            const chatLog = document.getElementById('chat-log');
+            chatLog.innerHTML = ''; // 一旦クリア
+            
+            const historyLog = JSON.parse(localStorage.getItem('chat_history_data')) || [];
+            historyLog.forEach(data => {
+                const elem = createMessageElement(data);
+                chatLog.appendChild(elem);
+            });
             chatLog.scrollTop = chatLog.scrollHeight;
+        }
+
+        // サーバーから新しいメッセージを受け取った時の処理
+        socket.on('receive_message', function(data) {
+            const chatLog = document.getElementById('chat-log');
+            
+            // データの正規化（タイムスタンプがない場合は現在の時刻を付与）
+            const messageData = {
+                name: data.name || 'Anonymous',
+                msg: data.msg || '',
+                timestamp: data.timestamp || new Date().toISOString()
+            };
+
+            // 1. 新しいメッセージを画面に追加
+            const elem = createMessageElement(messageData);
+            chatLog.appendChild(elem);
+            chatLog.scrollTop = chatLog.scrollHeight;
+
+            // 2. ローカルストレージの履歴データを更新（最大100件をキープ）
+            let historyLog = JSON.parse(localStorage.getItem('chat_history_data')) || [];
+            historyLog.push(messageData);
+            
+            if (historyLog.length > MAX_HISTORY) {
+                historyLog = historyLog.slice(-MAX_HISTORY); // 最新の100件のみ残す
+            }
+            localStorage.setItem('chat_history_data', JSON.stringify(historyLog));
         });
 
         // モーダル設定画面の開閉制御
@@ -364,7 +405,6 @@ HTML_TEMPLATE = """
 
         document.getElementById('close-modal-btn').addEventListener('click', closeModal);
         
-        // モーダルの外側をクリックしたときも閉じる
         window.addEventListener('click', function(event) {
             if (event.target === modal) {
                 closeModal();
@@ -377,13 +417,13 @@ HTML_TEMPLATE = """
             const name = document.getElementById('settings-name').value;
             const timestampChecked = document.getElementById('settings-timestamp').checked;
 
-            // ローカルストレージに保存
+            // 設定値をローカルに即時保存
             localStorage.setItem('chat_password', pwd);
             localStorage.setItem('chat_name', name);
             localStorage.setItem('chat_timestamp', timestampChecked);
 
-            // メイン画面のパスワードフィールドにも同期
-            document.getElementById('password').value = pwd;
+            // 設定変更（特にタイムスタンプのON/OFF）を現在のチャットログに反映させるため再描画
+            renderLocalHistory();
 
             alert("Settings saved!");
             closeModal();
@@ -391,7 +431,8 @@ HTML_TEMPLATE = """
     </script>
 </body>
 </html>
-"""
+# """
+
 
 # 既存の初期化コード
 socketio = SocketIO(app, cors_allowed_origins="*")
