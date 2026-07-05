@@ -126,9 +126,9 @@ def get_history():
             rows = cursor.fetchall()
             for row in reversed(rows):
                 history.append({
-                    'name': row['username'],   # クライアント側の期待するキー 'name' に統一
+                    'name': row['username'],   
                     'msg': row['msg'],
-                    'timestamp': row['time_str'], # クライアント側の期待するキー 'timestamp' に統一
+                    'timestamp': row['time_str'], 
                     'sender_id': row['sender_id']
                 })
     except Exception as e:
@@ -141,9 +141,7 @@ def get_history():
 init_db()
 
 # -------------------------------------------------------------------------
-# Completely English & Accessibility-friendly HTML Template (V4)
-# - 名前・タイムスタンプを青色にスタイル適用
-# - 送信された名前(Name)がAnonymousにならず適切に表示されるロジック
+# Completely English & Accessibility-friendly HTML Template (V5)
 # -------------------------------------------------------------------------
 HTML_TEMPLATE = """
 <!DOCTYPE html>
@@ -163,7 +161,6 @@ HTML_TEMPLATE = """
         
         .message { margin-bottom: 10px; padding: 8px; border-bottom: 1px solid #eee; display: flex; flex-direction: column; }
         
-        /* 名前とタイムスタンプのエリアを青色（#0056b3）に指定して本文と区別 */
         .msg-meta { font-size: 0.85em; color: #0056b3; margin-bottom: 4px; display: flex; gap: 8px; }
         .msg-user { font-weight: bold; color: #0056b3; }
         .timestamp { font-weight: normal; color: #0056b3; }
@@ -180,22 +177,22 @@ HTML_TEMPLATE = """
         .welcome-container { display: flex; align-items: center; justify-content: space-between; margin-bottom: 10px; }
         .welcome-text { font-size: 1.1em; font-weight: bold; margin: 0; }
         
-        # .settings-btn { background: none; border: none; padding: 4px; cursor: pointer; display: flex; align-items: center; justify-content: center; transition: transform 0.2s; }
-        # .settings-btn:hover { transform: rotate(45deg); }
-        # .settings-btn svg { width: 18px; height: 18px; fill: #333; }
         .settings-btn { 
             background: none; 
             border: none; 
-            padding: 0;          /* 余計な余白を削る */
+            padding: 0;          
             cursor: pointer; 
-            display: inline-flex; /* 内部のSVGを中央に正しく配置 */
+            display: inline-flex; 
             align-items: center; 
             justify-content: center; 
             transition: transform 0.2s; 
-            width: 32px;         /* ボタン自体の幅を明示 */
-            height: 32px;        /* ボタン自体の高さを明示 */
-            overflow: visible;   /* はみ出しによるカットを防ぐ */
-}
+            width: 32px;         
+            height: 32px;        
+            overflow: visible;   
+        }
+        .settings-btn:hover { transform: rotate(45deg); }
+        .settings-btn svg { width: 24px; height: 24px; fill: #333; }
+        
         #history-status { color: #888; font-style: italic; margin: 5px 0 15px 0; }
 
         /* 設定モーダル */
@@ -218,7 +215,7 @@ HTML_TEMPLATE = """
             <p class="welcome-text">Welcome to the real-time chatroom for all GDG members..</p>
             <button id="settings-icon" class="settings-btn" title="Settings" aria-label="Open Settings">
                 <svg viewBox="0 0 24 24">
-                    <path d="M19.43 12.98c.04-.32.07-.64.07-.98s-.03-.66-.07-.98l2.11-1.65c.19-.15.24-.42.12-.64l-2-3.46c-.12-.22-.39-.3-.61-.22l-2.49 1c-.52-.4-1.08-.73-1.69-.98l-.38-2.65C14.46 2.18 14.25 2 14 2h-4c-.25 0-.46.18-.49.42l-.38 2.65c-.61.25-1.17.59-1.69.98l-2.49-1c-.23-.09-.49 0-.61.22l-2 3.46c-.13.22-.07.49.12.64l2.11 1.65c-.04.32-.07.65-.07.98s.03.66.07.98l-2.11 1.65c-.19.15-.24.42-.12.64l2 3.46c.12.22.39.3.61.22l2.49-1c.52.4 1.08.73(1.69-.98l.38-2.65c.03-.24.24-.42.49-.42h4c.25 0 .46.18.49.42l.38-2.65c.61-.25 1.17-.59 1.69-.98l2.49 1c.23.09.49 0 .61-.22l2-3.46c.12-.22.07-.49-.12-.64l-2.11-1.65zM12 15.5c-1.93 0-3.5-1.57-3.5-3.5s1.57-3.5 3.5-3.5 3.5 1.57 3.5 3.5-1.57 3.5-3.5 3.5z"/>
+                    <path d="M19.14,12.94c0.04-0.3,0.06-0.61,0.06-0.94c0-0.32-0.02-0.64-0.07-0.94l2.03-1.58c0.18-0.14,0.23-0.41,0.12-0.61 l-1.92-3.32c-0.12-0.22-0.37-0.29-0.59-0.22l-2.39,0.96c-0.5-0.38-1.03-0.7-1.62-0.94L14.4,2.81C14.36,2.58,14.17,2.4,13.93,2.4 h-3.87c-0.24,0-0.43,0.17-0.47,0.41L9.21,5.35C8.63,5.6,8.1,5.92,7.6,6.3L5.21,5.34c-0.22-0.08-0.47,0-0.59,0.22L2.69,8.87 C2.57,9.08,2.62,9.35,2.8,9.48l2.03,1.58C4.79,11.37,4.77,11.69,4.77,12c0,0.31,0.02,0.63,0.06,0.94L2.8,14.52 c-0.18,0.14-0.23,0.41-0.12,0.61l1.92,3.32c0.12,0.22,0.37,0.29,0.59,0.22l2.39-0.96c0.5,0.38,1.03,0.7,1.62,0.94l0.36,2.54 c0.05,0.24,0.24,0.41,0.48,0.41h3.87c0.24,0,0.43-0.17,0.47-0.41l0.36-2.54c0.59-0.24,1.13-0.56,1.62-0.94l2.39,0.96 c0.22,0.08,0.47,0,0.59-0.22l1.92-3.32c0.12-0.22,0.07-0.47-0.12-0.61L19.14,12.94z M12,15.6c-1.98,0-3.6-1.62-3.6-3.6 s1.62-3.6,3.6-3.6s3.6,1.62,3.6,3.6S13.98,15.6,12,15.6z"/>
                 </svg>
             </button>
         </div>
@@ -226,7 +223,7 @@ HTML_TEMPLATE = """
         <p id="history-status">System: History being loaded.</p>
 
         <div id="chat-area">
-            <div id="chat-log" role="log" aria-live="polite"></div>
+            <div id="chat-log" role="log"></div>
             <div class="input-group">
                 <input type="text" id="message-input" placeholder="Type a message...">
             </div>
@@ -262,6 +259,41 @@ HTML_TEMPLATE = """
         const MAX_HISTORY = 100;
         const socket = io({ transports: ['polling'] });
 
+        // Web Audio API を用いた DingDong 通知音生成システム
+        function playDingDong() {
+            try {
+                const AudioContext = window.AudioContext || window.webkitAudioContext;
+                if (!AudioContext) return;
+                const ctx = new AudioContext();
+                
+                // 1音目 (Ding)
+                const osc1 = ctx.createOscillator();
+                const gain1 = ctx.createGain();
+                osc1.type = 'sine';
+                osc1.frequency.setValueAtTime(587.33, ctx.currentTime); // D5 (高めの音)
+                gain1.gain.setValueAtTime(0.1, ctx.currentTime);
+                gain1.gain.exponentialRampToValueAtTime(0.001, ctx.currentTime + 0.4);
+                osc1.connect(gain1);
+                gain1.connect(ctx.destination);
+                osc1.start(ctx.currentTime);
+                osc1.stop(ctx.currentTime + 0.4);
+
+                // 2音目 (Dong) - 少し遅れて低い音を鳴らす
+                const osc2 = ctx.createOscillator();
+                const gain2 = ctx.createGain();
+                osc2.type = 'sine';
+                osc2.frequency.setValueAtTime(440.00, ctx.currentTime + 0.15); // A4 (少し低めの音)
+                gain2.gain.setValueAtTime(0.1, ctx.currentTime + 0.15);
+                gain2.gain.exponentialRampToValueAtTime(0.001, ctx.currentTime + 0.6);
+                osc2.connect(gain2);
+                gain2.connect(ctx.destination);
+                osc2.start(ctx.currentTime + 0.15);
+                osc2.stop(ctx.currentTime + 0.6);
+            } catch (e) {
+                console.log("Audio playback failed or blocked by browser policy:", e);
+            }
+        }
+
         window.addEventListener('DOMContentLoaded', () => {
             const savedPassword = localStorage.getItem('chat_password') || '';
             const savedName = localStorage.getItem('chat_name') || '';
@@ -279,7 +311,8 @@ HTML_TEMPLATE = """
             }, 1500);
         });
 
-        document.getElementById('send-btn').addEventListener('click', () => {
+        // メッセージ送信の共通関数
+        function sendMessage() {
             const input = document.getElementById('message-input');
             const message = input.value.trim();
             const name = localStorage.getItem('chat_name') || 'Anonymous';
@@ -295,6 +328,38 @@ HTML_TEMPLATE = """
                 });
                 input.value = ''; 
             }
+        }
+
+        // Sendボタンクリックでの送信
+        document.getElementById('send-btn').addEventListener('click', sendMessage);
+
+        // 入力欄でのEnterキー押下時の送信コントロール
+        document.getElementById('message-input').addEventListener('keydown', function(event) {
+            // IME確定時のEnterでの誤送信を防ぐ判定
+            if (event.isComposing || event.keyCode === 229) return;
+
+            // 【設定方法の切り替え】
+            // パターンA: 通常のEnterだけで送信する場合 (デフォルト)
+            if (event.key === 'Enter' && !event.shiftKey && !event.ctrlKey) {
+                event.preventDefault(); // 改行を防ぐ
+                sendMessage();
+            }
+
+            // パターンB: もし「Ctrl + Enter」だけで送信させたい場合は、上のパターンAをコメントアウトし、下の3行を有効にしてください
+            /*
+            if (event.key === 'Enter' && event.ctrlKey) {
+                event.preventDefault();
+                sendMessage();
+            }
+            */
+
+            // パターンC: もし「Shift + Enter」だけで送信させたい場合は、下の3行を有効にしてください
+            /*
+            if (event.key === 'Enter' && event.shiftKey) {
+                event.preventDefault();
+                sendMessage();
+            }
+            */
         });
 
         socket.on('load_history', function(history) {
@@ -381,6 +446,9 @@ HTML_TEMPLATE = """
             chatLog.appendChild(elem);
             chatLog.scrollTop = chatLog.scrollHeight;
 
+            // 新着メッセージ受信時に通知音をトリガー
+            playDingDong();
+
             let historyLog = JSON.parse(localStorage.getItem('chat_history_data')) || [];
             historyLog.push(messageData);
             
@@ -444,18 +512,14 @@ def handle_connect():
 @socketio.on('send_message')
 def handle_send_message(data):
     """メッセージを受信し、DBへの保存と全クライアントへのリアルタイムブロードキャストを行う"""
-    # フロントエンドから送られてくる可能性のある各種キー名を柔軟にフォールバック
     msg_content = data.get('msg') or data.get('message', '')
     user_name = data.get('name') or data.get('user') or data.get('username', 'Anonymous')
     
-    # メッセージにサーバー側でのタイムスタンプ（ISOフォーマット）を付与
     current_time = datetime.utcnow().isoformat() + 'Z'
-    sender_id = data.get('password', '') # 部屋のパスワードなどを識別子として利用
+    sender_id = data.get('password', '') 
     
-    # データベースへの非同期保存
     save_message(user_name, msg_content, current_time, sender_id)
     
-    # 接続中の全員（自分を含む）にメッセージをリレー転送
     emit('receive_message', {
         'name': user_name,
         'msg': msg_content,
@@ -463,7 +527,6 @@ def handle_send_message(data):
         'sender_id': sender_id
     }, broadcast=True)
 
-# アプリケーションの起動（Renderなど外部公開用に0.0.0.0ポートを指定）
 if __name__ == '__main__':
     port = int(os.environ.get("PORT", 5000))
     socketio.run(app, host='0.0.0.0', port=port, allow_unsafe_werkzeug=True)
