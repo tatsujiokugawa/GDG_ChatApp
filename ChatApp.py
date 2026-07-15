@@ -141,7 +141,7 @@ def get_history():
 init_db()
 
 # -------------------------------------------------------------------------
-# Completely English & Accessibility-friendly HTML Template (V5)
+# Completely English & Accessibility-friendly HTML Template (V6)
 # -------------------------------------------------------------------------
 HTML_TEMPLATE = """
 <!DOCTYPE html>
@@ -159,7 +159,9 @@ HTML_TEMPLATE = """
         #chat-area { display: block; }
         #chat-log { border: 2px solid #ccc; height: 400px; overflow-y: scroll; padding: 15px; margin-bottom: 15px; background: #f9f9f9; border-radius: 4px; }
         
-        .message { margin-bottom: 10px; padding: 8px; border-bottom: 1px solid #eee; display: flex; flex-direction: column; }
+        .message { margin-bottom: 10px; padding: 8px; border-bottom: 1px solid #eee; display: flex; flex-direction: column; outline: none; }
+        /* Focus ring styling specifically to help clear tracking visually if needed, while remaining semantic */
+        .message:focus { border: 2px solid #007bff; background: #eef7ff; border-radius: 4px; }
         
         .msg-meta { font-size: 0.85em; color: #0056b3; margin-bottom: 4px; display: flex; gap: 8px; }
         .msg-user { font-weight: bold; color: #0056b3; }
@@ -223,7 +225,7 @@ HTML_TEMPLATE = """
         <p id="history-status">System: History being loaded.</p>
 
         <div id="chat-area">
-            <div id="chat-log" role="log"></div>
+            <div id="chat-log" role="log" aria-label="Chat Log History"></div>
             <div class="input-group">
                 <input type="text" id="message-input" placeholder="Type a message...">
             </div>
@@ -333,33 +335,25 @@ HTML_TEMPLATE = """
         // Sendボタンクリックでの送信
         document.getElementById('send-btn').addEventListener('click', sendMessage);
 
-        // 入力欄でのEnterキー押下時の送信コントロール
+        // 入力欄でのキーイベントコントロール
         document.getElementById('message-input').addEventListener('keydown', function(event) {
-            // IME確定時のEnterでの誤送信を防ぐ判定
             if (event.isComposing || event.keyCode === 229) return;
 
-            // 【設定方法の切り替え】
-            // パターンA: 通常のEnterだけで送信する場合 (デフォルト)
+            // ユーザーの要望：入力欄で Shift + Tab を押したとき、最も新しいメッセージ（一番下）にダイレクトにフォーカスさせる
+            if (event.key === 'Tab' && event.shiftKey) {
+                const messages = document.querySelectorAll('#chat-log .message');
+                if (messages.length > 0) {
+                    event.preventDefault(); // デフォルトのタブ移動（ボタンへの移動など）を無効化
+                    messages[messages.length - 1].focus(); // 最も新しいメッセージにフォーカス
+                }
+                return;
+            }
+
+            // 通常のEnterだけで送信する場合
             if (event.key === 'Enter' && !event.shiftKey && !event.ctrlKey) {
-                event.preventDefault(); // 改行を防ぐ
+                event.preventDefault(); 
                 sendMessage();
             }
-
-            // パターンB: もし「Ctrl + Enter」だけで送信させたい場合は、上のパターンAをコメントアウトし、下の3行を有効にしてください
-            /*
-            if (event.key === 'Enter' && event.ctrlKey) {
-                event.preventDefault();
-                sendMessage();
-            }
-            */
-
-            // パターンC: もし「Shift + Enter」だけで送信させたい場合は、下の3行を有効にしてください
-            /*
-            if (event.key === 'Enter' && event.shiftKey) {
-                event.preventDefault();
-                sendMessage();
-            }
-            */
         });
 
         socket.on('load_history', function(history) {
@@ -394,19 +388,31 @@ HTML_TEMPLATE = """
             const messageElement = document.createElement('div');
             messageElement.classList.add('message');
             
+            // 重要：メッセージ全体をスクリーンリーダーが認識・移動できるように tabindex="0" を付与
+            messageElement.setAttribute('tabindex', '0');
+            
+            const name = data.name || 'Anonymous';
+            const showTimestamp = localStorage.getItem('chat_timestamp') === 'true';
+            const timeFormatted = showTimestamp ? formatTimestamp(data.timestamp) : '';
+            
+            // スクリーンリーダーが一文として滑らかに読み上げられるよう、読み上げ用テキストをaria-labelとして設定
+            const ariaText = `${name} says: ${data.msg}. ${showTimestamp ? 'Sent at ' + timeFormatted : ''}`;
+            messageElement.setAttribute('aria-label', ariaText);
+
+            // ビジュアル用の構造（画面表示用）
             const metaElement = document.createElement('div');
             metaElement.classList.add('msg-meta');
+            metaElement.setAttribute('aria-hidden', 'true'); // スクリーンリーダーの二重読みを防ぐ
             
             const nameSpan = document.createElement('span');
             nameSpan.classList.add('msg-user');
-            nameSpan.textContent = data.name || 'Anonymous';
+            nameSpan.textContent = name;
             metaElement.appendChild(nameSpan);
 
-            const showTimestamp = localStorage.getItem('chat_timestamp') === 'true';
             if (showTimestamp) {
                 const timeSpan = document.createElement('span');
                 timeSpan.classList.add('timestamp');
-                timeSpan.textContent = formatTimestamp(data.timestamp);
+                timeSpan.textContent = timeFormatted;
                 metaElement.appendChild(timeSpan);
             }
             
@@ -415,6 +421,7 @@ HTML_TEMPLATE = """
             const textElement = document.createElement('span');
             textElement.style.color = '#333';
             textElement.textContent = data.msg;
+            textElement.setAttribute('aria-hidden', 'true'); // スクリーンリーダーの二重読みを防ぐ
             messageElement.appendChild(textElement);
             
             return messageElement;
@@ -446,7 +453,6 @@ HTML_TEMPLATE = """
             chatLog.appendChild(elem);
             chatLog.scrollTop = chatLog.scrollHeight;
 
-            // 新着メッセージ受信時に通知音をトリガー
             playDingDong();
 
             let historyLog = JSON.parse(localStorage.getItem('chat_history_data')) || [];
