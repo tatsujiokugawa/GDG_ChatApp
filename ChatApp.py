@@ -184,12 +184,19 @@ HTML_TEMPLATE = """
         .settings-btn { 
             background: none; 
             border: none; 
+<<<<<<< HEAD
             padding: 4px; 
+=======
+
+            padding: 0;          
+
+>>>>>>> 322f1cfe5276ed6ded6a5c49007410de25afa321
             cursor: pointer; 
             display: inline-flex; 
             align-items: center; 
             justify-content: center; 
             transition: transform 0.2s; 
+<<<<<<< HEAD
             flex-shrink: 0;
             width: 36px; 
             height: 36px; 
@@ -199,6 +206,18 @@ HTML_TEMPLATE = """
         .settings-btn svg { width: 22px; height: 22px; fill: #333; display: block; }
         
         #history-status { color: #666; font-style: italic; margin: 5px 0 15px 0; font-size: 0.9em; }
+=======
+
+            width: 32px;         
+            height: 32px;        
+            overflow: visible;   
+        }
+        .settings-btn:hover { transform: rotate(45deg); }
+        .settings-btn svg { width: 24px; height: 24px; fill: #333; }
+        
+
+        #history-status { color: #888; font-style: italic; margin: 5px 0 15px 0; }
+>>>>>>> 322f1cfe5276ed6ded6a5c49007410de25afa321
 
         .modal { display: none; position: fixed; z-index: 100; left: 0; top: 0; width: 100%; height: 100%; background-color: rgba(0,0,0,0.5); }
         .modal-content { background-color: #fefefe; margin: 15% auto; padding: 20px; border: 1px solid #888; width: 90%; max-width: 400px; border-radius: 8px; box-shadow: 0 4px 15px rgba(0,0,0,0.2); }
@@ -224,8 +243,15 @@ HTML_TEMPLATE = """
         <div class="welcome-container">
             <p class="welcome-text">Welcome to the real-time chatroom for all GDG members.</p>
             <button id="settings-icon" class="settings-btn" title="Settings" aria-label="Open Settings">
+<<<<<<< HEAD
                 <svg viewBox="0 0 24 24">
                     <path d="M19.43 12.98c.04-.32.07-.64.07-.98s-.03-.66-.07-.98l2.11-1.65c.19-.15.24-.42.12-.64l-2-3.46c-.12-.22-.39-.3-.61-.22l-2.49 1c-.52-.4-1.08-.73-1.69-.98l-.38-2.65C14.46 2.18 14.25 2 14 2h-4c-.25 0-.46.18-.49.42l-.38 2.65c-.61.25-1.17.59-1.69.98l-2.49-1c-.23-.09-.49 0-.61.22l-2 3.46c-.13.22-.07.49.12.64l2.11 1.65c-.04.32-.07.65-.07.98s.03.66.07.98l-2.11 1.65c-.19.15-.24.42-.12.64l2 3.46c.12.22.39.3.61.22l2.49-1c.52.4 1.08.73 1.69-.98l.38-2.65c.03-.24.24-.42.49-.42h4c.25 0 .46.18.49.42l.38-2.65c.61-.25 1.17-.59 1.69-.98l2.49 1c.23.09.49 0 .61-.22l2-3.46c.12-.22.07-.49-.12-.64l-2.11-1.65zM12 15.5c-1.93 0-3.5-1.57-3.5-3.5s1.57-3.5 3.5-3.5 3.5 1.57 3.5 3.5-1.57 3.5-3.5 3.5z"/>
+=======
+
+                <svg viewBox="0 0 24 24" width="18" height="18">
+                    <path d="M19.43 12.98c.04-.32.07-.64.07-.98s-.03-.66-.07-.98l2.11-1.65c.19-.15.24-.42.12-.64l-2-3.46c-.12-.22-.39-.3-.61-.22l-2.49 1c-.52-.4-1.08-.73-1.69-.98l-.38-2.65C14.46 2.18 14.25 2 14 2h-4c-.25 0-.46.18-.49.42l-.38 2.65c-.61.25-1.17.59-1.69.98l-2.49-1c-.23-.09-.49 0-.61.22l-2 3.46c-.13.22-.07.49.12.64l2.11 1.65c-.04.32-.07.65-.07.98s.03.66.07.98l-2.11 1.65c-.19.15-.24.42-.12.64l2 3.46c.12.22.39.3.61.22l2.49-1c.52.4 1.08.73 1.69-.98l.38-2.65c.03-.24.24-.42.49-.42h4c.25 0 .46.18.49.42l.38-2.65c.61-.25 1.17-.59 1.69-.98l2.49 1c.23.09.49 0 .61-.22l2-3.46c.12-.22.07-.49-.12-.64l-2.11-1.65zM12 15.5c-1.93 0-3.5-1.57-3.5-3.5s1.57-3.5 3.5-3.5 3.5 1.57 3.5 3.5-1.57 3.5-3.5 3.5z"/>
+
+>>>>>>> 322f1cfe5276ed6ded6a5c49007410de25afa321
                 </svg>
             </button>
         </div>
@@ -319,7 +345,14 @@ HTML_TEMPLATE = """
             }
         });
 
+<<<<<<< HEAD
         // メッセージ送信処理
+=======
+
+
+        // メッセージ送信の共通関数
+
+>>>>>>> 322f1cfe5276ed6ded6a5c49007410de25afa321
         function sendMessage() {
             const input = document.getElementById('message-input');
             const message = input.value.trim();
@@ -338,7 +371,29 @@ HTML_TEMPLATE = """
             }
         }
 
+<<<<<<< HEAD
         // キーボード操作（Enter送信、Shift+Enter改行、Shift+Tabフォーカス移動）
+=======
+
+        document.getElementById('send-btn').addEventListener('click', sendMessage);
+
+        // 【変更】Enterキーで送信、Shift + Enter キーで改行する処理
+        document.getElementById('message-input').addEventListener('keydown', (e) => {
+            if (e.key === 'Enter') {
+                if (e.shiftKey) {
+                    // Shift + Enter の場合は改行を許可する
+                    return;
+                } else {
+                    // Enter のみの場合は送信する
+                    e.preventDefault();
+                    sendMessage();
+                }
+
+        // Sendボタンクリックでの送信
+        document.getElementById('send-btn').addEventListener('click', sendMessage);
+
+        // 入力欄でのキーイベントコントロール
+>>>>>>> 322f1cfe5276ed6ded6a5c49007410de25afa321
         document.getElementById('message-input').addEventListener('keydown', function(event) {
             if (event.isComposing || event.keyCode === 229) return;
 
@@ -351,6 +406,7 @@ HTML_TEMPLATE = """
                 return;
             }
 
+<<<<<<< HEAD
             if (event.key === 'Enter') {
                 if (event.shiftKey) {
                     return; // 改行
@@ -358,6 +414,13 @@ HTML_TEMPLATE = """
                     event.preventDefault();
                     sendMessage();
                 }
+=======
+            // 通常のEnterだけで送信する場合
+            if (event.key === 'Enter' && !event.shiftKey && !event.ctrlKey) {
+                event.preventDefault(); 
+                sendMessage();
+
+>>>>>>> 322f1cfe5276ed6ded6a5c49007410de25afa321
             }
         });
 
@@ -440,9 +503,19 @@ HTML_TEMPLATE = """
             const textElement = document.createElement('div');
             textElement.classList.add('msg-text');
             textElement.style.color = '#333';
+<<<<<<< HEAD
             textElement.style.wordBreak = 'break-all';
             textElement.innerHTML = formatMessageText(data.msg);
 
+=======
+
+            textElement.style.wordBreak = 'break-all';
+            textElement.innerHTML = formatMessageText(data.msg);
+
+            textElement.textContent = data.msg;
+            textElement.setAttribute('aria-hidden', 'true'); // スクリーンリーダーの二重読みを防ぐ
+
+>>>>>>> 322f1cfe5276ed6ded6a5c49007410de25afa321
             messageElement.appendChild(textElement);
             return messageElement;
         }
@@ -523,7 +596,12 @@ HTML_TEMPLATE = """
     </script>
 </body>  
 </html>
+<<<<<<< HEAD
 """
+=======
+#"""
+
+>>>>>>> 322f1cfe5276ed6ded6a5c49007410de25afa321
 # -------------------------------------------------------------------------
 # Flask ルーティング定義
 # -------------------------------------------------------------------------
