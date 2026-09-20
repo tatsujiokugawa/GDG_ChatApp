@@ -351,20 +351,23 @@ HTML_TEMPLATE = """
         document.getElementById('send-btn').addEventListener('click', sendMessage);
 
         document.getElementById('message-input').addEventListener('keydown', (e) => {
+            // Enterキーが押された場合
             if (e.key === 'Enter') {
                 if (e.shiftKey) {
-                    // Shift + Enter の場合は改行を許可する
+                    // Shift + Enter の場合は何もしない（ブラウザのデフォルト機能で改行させる）
                     return;
                 } else {
-                    // Enter のみの場合は送信する
+                    // Enterキー単体の場合は、改行を確実に阻止して送信する
                     e.preventDefault();
                     sendMessage();
                 }
-            } else if (e.key === 'Tab') {
-                // Tab / Shift + Tab によるフォーカス移動（必要に応じた処理）
-                // ※ブラウザのデフォルトのフォーカス移動をそのまま活かす場合は特にreturnやpreventDefaultは不要です
             }
-        });        
+        });             
+
+
+        // 送信ボタンのクリックイベント
+        document.getElementById('send-btn').addEventListener('click', sendMessage);
+                    
         document.getElementById('message-input').addEventListener('keydown', function(event) {
             if (event.isComposing || event.keyCode === 229) return;
 
