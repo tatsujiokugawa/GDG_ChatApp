@@ -130,7 +130,7 @@ def get_history():
                     'name': row['username'], 
 =======
                     'name': row['username'],   
->>>>>>> 1c5fbbdbc97c68588038f3b19487a7d9a109bf36
+
                     'msg': row['msg'],
                     'timestamp': row['time_str'], 
                     'sender_id': row['sender_id']
