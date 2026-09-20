@@ -350,8 +350,9 @@ HTML_TEMPLATE = """
 // 送信ボタンのクリックイベント
         document.getElementById('send-btn').addEventListener('click', sendMessage);
 
+        // message-input に対するイベントを一つに統一し、他の競合を完全に防ぐ
         document.getElementById('message-input').addEventListener('keydown', function(event) {
-            // Tab / Shift + Tab によるフォーカス移動
+            // Tabキーの処理
             if (event.key === 'Tab' && event.shiftKey) {
                 const messages = document.querySelectorAll('#chat-log .message');
                 if (messages.length > 0) {
@@ -361,17 +362,20 @@ HTML_TEMPLATE = """
                 return;
             }
 
-            // Enterキーの処理（isComposingの誤作動を防ぐため、確実にEnterだけを捉える）
+            // Enterキーの処理
             if (event.key === 'Enter') {
                 if (event.shiftKey) {
-                    return; // Shift + Enter の場合は改行
+                    // Shift + Enter の場合は改行を許可
+                    return;
                 } else {
+                    // Enter単体の場合は、他のリスナーの邪魔を受けずに強制的に送信する
                     event.preventDefault();
-                    sendMessage(); // Enter のみの場合は送信
+                    event.stopImmediatePropagation(); // 他の競合するイベントを完全にシャットアウト
+                    sendMessage();
                 }
             }
-        });
-
+        }, true); // キャプチャフェーズで最優先でキャッチする
+        
         socket.on('load_history', function(history) {
             const statusMessage = document.getElementById('history-status');
             if (statusMessage) statusMessage.remove();
