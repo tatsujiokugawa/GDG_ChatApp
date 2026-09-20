@@ -143,7 +143,7 @@ def get_history():
 init_db()
 
 # Completely English & Accessibility-friendly HTML Template (V6)
->>>>>>> 1c5fbbdbc97c68588038f3b19487a7d9a109bf36
+
 # -------------------------------------------------------------------------
 HTML_TEMPLATE = """
 <!DOCTYPE html>
