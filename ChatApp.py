@@ -151,7 +151,7 @@ HTML_TEMPLATE = """
 <head>
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
-    <title>Global Discussion Group ChatRoom v2</title>
+    <title>Global Discussion Group ChatRoom v2.1</title>
     <script src="https://cdn.socket.io/4.7.5/socket.io.min.js"></script>
     
     <style>
