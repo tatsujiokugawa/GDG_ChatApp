@@ -243,7 +243,7 @@ HTML_TEMPLATE = """
             <div id="chat-log" role="log" aria-label="Chat Log History"></div>
             <div class="input-group">
                 <label for="message-input">Message</label>
-                <div class="note-hint">※送信: Enterキー / 改行: Shift + Enterキー (URLは自動リンク)</div>
+                <small>Press Enter to send / Shift + Enter for a new line (URLs are auto-linked)</small>
                 <textarea id="message-input" placeholder="Type a message..."></textarea>
             </div>
         </div>
@@ -347,30 +347,11 @@ HTML_TEMPLATE = """
             }
         }
 
-// キーボード操作・送信ボタンの統合処理
+// 送信ボタンのクリックイベント
         document.getElementById('send-btn').addEventListener('click', sendMessage);
 
-        document.getElementById('message-input').addEventListener('keydown', (e) => {
-            // Enterキーが押された場合
-            if (e.key === 'Enter') {
-                if (e.shiftKey) {
-                    // Shift + Enter の場合は何もしない（ブラウザのデフォルト機能で改行させる）
-                    return;
-                } else {
-                    // Enterキー単体の場合は、改行を確実に阻止して送信する
-                    e.preventDefault();
-                    sendMessage();
-                }
-            }
-        });             
-
-
-        // 送信ボタンのクリックイベント
-        document.getElementById('send-btn').addEventListener('click', sendMessage);
-                    
         document.getElementById('message-input').addEventListener('keydown', function(event) {
-            if (event.isComposing || event.keyCode === 229) return;
-
+            // Tab / Shift + Tab によるフォーカス移動
             if (event.key === 'Tab' && event.shiftKey) {
                 const messages = document.querySelectorAll('#chat-log .message');
                 if (messages.length > 0) {
@@ -380,15 +361,14 @@ HTML_TEMPLATE = """
                 return;
             }
 
-
+            // Enterキーの処理（isComposingの誤作動を防ぐため、確実にEnterだけを捉える）
             if (event.key === 'Enter') {
                 if (event.shiftKey) {
-                    return; // 改行
+                    return; // Shift + Enter の場合は改行
                 } else {
                     event.preventDefault();
-                    sendMessage();
+                    sendMessage(); // Enter のみの場合は送信
                 }
-
             }
         });
 
