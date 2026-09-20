@@ -126,9 +126,7 @@ def get_history():
             rows = cursor.fetchall()
             for row in reversed(rows):
                 history.append({
-<<<<<<< HEAD
-                    'name': row['username'], 
-=======
+
                     'name': row['username'],   
 
                     'msg': row['msg'],
@@ -188,22 +186,15 @@ HTML_TEMPLATE = """
         .settings-btn { 
             background: none; 
             border: none; 
-<<<<<<< HEAD
-            padding: 0; 
-=======
+
             padding: 0;          
->>>>>>> 1c5fbbdbc97c68588038f3b19487a7d9a109bf36
+
             cursor: pointer; 
             display: inline-flex; 
             align-items: center; 
             justify-content: center; 
             transition: transform 0.2s; 
-<<<<<<< HEAD
-            width: 32px; 
-            height: 32px; 
-            overflow: visible; 
-        }
-=======
+
             width: 32px;         
             height: 32px;        
             overflow: visible;   
@@ -211,7 +202,7 @@ HTML_TEMPLATE = """
         .settings-btn:hover { transform: rotate(45deg); }
         .settings-btn svg { width: 24px; height: 24px; fill: #333; }
         
->>>>>>> 1c5fbbdbc97c68588038f3b19487a7d9a109bf36
+
         #history-status { color: #888; font-style: italic; margin: 5px 0 15px 0; }
 
         .modal { display: none; position: fixed; z-index: 100; left: 0; top: 0; width: 100%; height: 100%; background-color: rgba(0,0,0,0.5); }
@@ -236,13 +227,10 @@ HTML_TEMPLATE = """
         <div class="welcome-container">
             <p class="welcome-text">Welcome to the real-time chatroom for all GDG members..</p>
             <button id="settings-icon" class="settings-btn" title="Settings" aria-label="Open Settings">
-<<<<<<< HEAD
+
                 <svg viewBox="0 0 24 24" width="18" height="18">
                     <path d="M19.43 12.98c.04-.32.07-.64.07-.98s-.03-.66-.07-.98l2.11-1.65c.19-.15.24-.42.12-.64l-2-3.46c-.12-.22-.39-.3-.61-.22l-2.49 1c-.52-.4-1.08-.73-1.69-.98l-.38-2.65C14.46 2.18 14.25 2 14 2h-4c-.25 0-.46.18-.49.42l-.38 2.65c-.61.25-1.17.59-1.69.98l-2.49-1c-.23-.09-.49 0-.61.22l-2 3.46c-.13.22-.07.49.12.64l2.11 1.65c-.04.32-.07.65-.07.98s.03.66.07.98l-2.11 1.65c-.19.15-.24.42-.12.64l2 3.46c.12.22.39.3.61.22l2.49-1c.52.4 1.08.73 1.69-.98l.38-2.65c.03-.24.24-.42.49-.42h4c.25 0 .46.18.49.42l.38-2.65c.61-.25 1.17-.59 1.69-.98l2.49 1c.23.09.49 0 .61-.22l2-3.46c.12-.22.07-.49-.12-.64l-2.11-1.65zM12 15.5c-1.93 0-3.5-1.57-3.5-3.5s1.57-3.5 3.5-3.5 3.5 1.57 3.5 3.5-1.57 3.5-3.5 3.5z"/>
-=======
-                <svg viewBox="0 0 24 24">
-                    <path d="M19.14,12.94c0.04-0.3,0.06-0.61,0.06-0.94c0-0.32-0.02-0.64-0.07-0.94l2.03-1.58c0.18-0.14,0.23-0.41,0.12-0.61 l-1.92-3.32c-0.12-0.22-0.37-0.29-0.59-0.22l-2.39,0.96c-0.5-0.38-1.03-0.7-1.62-0.94L14.4,2.81C14.36,2.58,14.17,2.4,13.93,2.4 h-3.87c-0.24,0-0.43,0.17-0.47,0.41L9.21,5.35C8.63,5.6,8.1,5.92,7.6,6.3L5.21,5.34c-0.22-0.08-0.47,0-0.59,0.22L2.69,8.87 C2.57,9.08,2.62,9.35,2.8,9.48l2.03,1.58C4.79,11.37,4.77,11.69,4.77,12c0,0.31,0.02,0.63,0.06,0.94L2.8,14.52 c-0.18,0.14-0.23,0.41-0.12,0.61l1.92,3.32c0.12,0.22,0.37,0.29,0.59,0.22l2.39-0.96c0.5,0.38,1.03,0.7,1.62,0.94l0.36,2.54 c0.05,0.24,0.24,0.41,0.48,0.41h3.87c0.24,0,0.43-0.17,0.47-0.41l0.36-2.54c0.59-0.24,1.13-0.56,1.62-0.94l2.39,0.96 c0.22,0.08,0.47,0,0.59-0.22l1.92-3.32c0.12-0.22,0.07-0.47-0.12-0.61L19.14,12.94z M12,15.6c-1.98,0-3.6-1.62-3.6-3.6 s1.62-3.6,3.6-3.6s3.6,1.62,3.6,3.6S13.98,15.6,12,15.6z"/>
->>>>>>> 1c5fbbdbc97c68588038f3b19487a7d9a109bf36
+
                 </svg>
             </button>
         </div>
@@ -333,10 +321,10 @@ HTML_TEMPLATE = """
             document.getElementById('settings-timestamp').checked = savedTimestamp;
         });
 
-<<<<<<< HEAD
-=======
+
+
         // メッセージ送信の共通関数
->>>>>>> 1c5fbbdbc97c68588038f3b19487a7d9a109bf36
+
         function sendMessage() {
             const input = document.getElementById('message-input');
             const message = input.value.trim();
@@ -355,7 +343,7 @@ HTML_TEMPLATE = """
             }
         }
 
-<<<<<<< HEAD
+
         document.getElementById('send-btn').addEventListener('click', sendMessage);
 
         // 【変更】Enterキーで送信、Shift + Enter キーで改行する処理
@@ -369,7 +357,7 @@ HTML_TEMPLATE = """
                     e.preventDefault();
                     sendMessage();
                 }
-=======
+
         // Sendボタンクリックでの送信
         document.getElementById('send-btn').addEventListener('click', sendMessage);
 
@@ -391,7 +379,7 @@ HTML_TEMPLATE = """
             if (event.key === 'Enter' && !event.shiftKey && !event.ctrlKey) {
                 event.preventDefault(); 
                 sendMessage();
->>>>>>> 1c5fbbdbc97c68588038f3b19487a7d9a109bf36
+
             }
         });
 
@@ -478,13 +466,13 @@ HTML_TEMPLATE = """
             const textElement = document.createElement('div');
             textElement.classList.add('msg-text');
             textElement.style.color = '#333';
-<<<<<<< HEAD
+
             textElement.style.wordBreak = 'break-all';
             textElement.innerHTML = formatMessageText(data.msg);
-=======
+
             textElement.textContent = data.msg;
             textElement.setAttribute('aria-hidden', 'true'); // スクリーンリーダーの二重読みを防ぐ
->>>>>>> 1c5fbbdbc97c68588038f3b19487a7d9a109bf36
+
             messageElement.appendChild(textElement);
             
             return messageElement;
@@ -561,7 +549,7 @@ HTML_TEMPLATE = """
     </script>
 </body>
 </html>
-"""
+#"""
 
 # -------------------------------------------------------------------------
 # Flask ルーティング定義
@@ -581,10 +569,10 @@ def handle_connect():
 
 @socketio.on('send_message')
 def handle_send_message(data):
-<<<<<<< HEAD
-=======
+
+
     """メッセージを受信し、DBへの保存と全クライアントへのリアルタイムブロードキャストを行う"""
->>>>>>> 1c5fbbdbc97c68588038f3b19487a7d9a109bf36
+
     msg_content = data.get('msg') or data.get('message', '')
     user_name = data.get('name') or data.get('user') or data.get('username', 'Anonymous')
     
