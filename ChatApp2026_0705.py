@@ -12,6 +12,7 @@ os.environ["PSYCOPG_IMPL"] = "python"
 app = Flask(__name__)
 app.config['SECRET_KEY'] = os.environ.get('SECRET_KEY', 'meet_backchat_secret_key')
 
+# Render環境やローカルスレッド環境で安定して動作するよう threading を指定
 socketio = SocketIO(
     app, 
     cors_allowed_origins="*", 
@@ -27,6 +28,7 @@ MAX_HISTORY = 100
 import psycopg
 
 class DictCursorAdapter:
+    """psycopg2 の DictCursor の挙動を psycopg v3 で再現するアダプター"""
     def __init__(self, cursor):
         self.cursor = cursor
     def execute(self, query, params=None):
@@ -40,6 +42,7 @@ class DictCursorAdapter:
         self.cursor.close()
 
 class PostgresConnectionAdapter:
+    """psycopg2 の connection の挙動を再現するアダプター"""
     def __init__(self, conn):
         self.conn = conn
     def cursor(self, cursor_factory=None):
@@ -53,6 +56,7 @@ class PostgresConnectionAdapter:
         self.conn.close()
 
 class psycopg2_mock:
+    """psycopg2 モジュールのダミーオブジェクト"""
     @staticmethod
     def connect(url):
         if "?" in url:
@@ -95,18 +99,14 @@ def save_message(user, msg, time, sender_id):
     conn = get_db_connection()
     try:
         with conn.cursor() as cursor:
-            # メッセージの挿入
             cursor.execute(
                 'INSERT INTO chat_messages (username, msg, time_str, sender_id) VALUES (%s, %s, %s, %s)',
                 (user, msg, time, sender_id)
             )
-            # 【修正】PostgreSQLで正しく動くようにサブクエリを二重にして古いものを削除
             cursor.execute('''
                 DELETE FROM chat_messages 
                 WHERE id NOT IN (
-                    SELECT id FROM (
-                        SELECT id FROM chat_messages ORDER BY id DESC LIMIT %s
-                    ) AS temp_table
+                    SELECT id FROM chat_messages ORDER BY id DESC LIMIT %s
                 )
             ''', (MAX_HISTORY,))
             conn.commit()
@@ -126,11 +126,7 @@ def get_history():
             rows = cursor.fetchall()
             for row in reversed(rows):
                 history.append({
-<<<<<<< HEAD
-                    'name': row['username'], 
-=======
                     'name': row['username'],   
->>>>>>> 1c5fbbdbc97c68588038f3b19487a7d9a109bf36
                     'msg': row['msg'],
                     'timestamp': row['time_str'], 
                     'sender_id': row['sender_id']
@@ -145,11 +141,7 @@ def get_history():
 init_db()
 
 # -------------------------------------------------------------------------
-<<<<<<< HEAD
-# HTML / JavaScript テンプレート (修正版)
-=======
-# Completely English & Accessibility-friendly HTML Template (V6)
->>>>>>> 1c5fbbdbc97c68588038f3b19487a7d9a109bf36
+# Completely English & Accessibility-friendly HTML Template (V5)
 # -------------------------------------------------------------------------
 HTML_TEMPLATE = """
 <!DOCTYPE html>
@@ -157,7 +149,7 @@ HTML_TEMPLATE = """
 <head>
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
-    <title>Global Discussion Group ChatRoom v2</title>
+    <title>Global Discussion Group ChatRoom</title>
     <script src="https://cdn.socket.io/4.7.5/socket.io.min.js"></script>
     
     <style>
@@ -167,9 +159,7 @@ HTML_TEMPLATE = """
         #chat-area { display: block; }
         #chat-log { border: 2px solid #ccc; height: 400px; overflow-y: scroll; padding: 15px; margin-bottom: 15px; background: #f9f9f9; border-radius: 4px; }
         
-        .message { margin-bottom: 10px; padding: 8px; border-bottom: 1px solid #eee; display: flex; flex-direction: column; outline: none; }
-        /* Focus ring styling specifically to help clear tracking visually if needed, while remaining semantic */
-        .message:focus { border: 2px solid #007bff; background: #eef7ff; border-radius: 4px; }
+        .message { margin-bottom: 10px; padding: 8px; border-bottom: 1px solid #eee; display: flex; flex-direction: column; }
         
         .msg-meta { font-size: 0.85em; color: #0056b3; margin-bottom: 4px; display: flex; gap: 8px; }
         .msg-user { font-weight: bold; color: #0056b3; }
@@ -180,9 +170,7 @@ HTML_TEMPLATE = """
         .checkbox-group label { margin-bottom: 0; font-weight: bold; }
         label { display: block; font-weight: bold; margin-bottom: 5px; }
         
-        textarea { width: 100%; height: 80px; padding: 10px; font-size: 16px; box-sizing: border-box; border: 1px solid #ccc; border-radius: 4px; font-family: sans-serif; resize: vertical; }
         input[type="text"], input[type="password"] { width: 100%; padding: 10px; font-size: 16px; box-sizing: border-box; border: 1px solid #ccc; border-radius: 4px; }
-        
         button { padding: 10px 20px; font-size: 16px; cursor: pointer; background: #007bff; color: white; border: none; border-radius: 4px; }
         button:hover { background: #0056b3; }
         
@@ -192,22 +180,12 @@ HTML_TEMPLATE = """
         .settings-btn { 
             background: none; 
             border: none; 
-<<<<<<< HEAD
-            padding: 0; 
-=======
             padding: 0;          
->>>>>>> 1c5fbbdbc97c68588038f3b19487a7d9a109bf36
             cursor: pointer; 
             display: inline-flex; 
             align-items: center; 
             justify-content: center; 
             transition: transform 0.2s; 
-<<<<<<< HEAD
-            width: 32px; 
-            height: 32px; 
-            overflow: visible; 
-        }
-=======
             width: 32px;         
             height: 32px;        
             overflow: visible;   
@@ -215,9 +193,9 @@ HTML_TEMPLATE = """
         .settings-btn:hover { transform: rotate(45deg); }
         .settings-btn svg { width: 24px; height: 24px; fill: #333; }
         
->>>>>>> 1c5fbbdbc97c68588038f3b19487a7d9a109bf36
         #history-status { color: #888; font-style: italic; margin: 5px 0 15px 0; }
 
+        /* 設定モーダル */
         .modal { display: none; position: fixed; z-index: 100; left: 0; top: 0; width: 100%; height: 100%; background-color: rgba(0,0,0,0.5); }
         .modal-content { background-color: #fefefe; margin: 10% auto; padding: 20px; border: 1px solid #888; width: 85%; max-width: 400px; border-radius: 8px; box-shadow: 0 4px 15px rgba(0,0,0,0.2); }
         .modal-header { display: flex; justify-content: space-between; align-items: center; margin-bottom: 15px; }
@@ -225,40 +203,29 @@ HTML_TEMPLATE = """
         .close-btn { font-size: 28px; font-weight: bold; cursor: pointer; background: none; border: none; color: #aaa; padding: 0; line-height: 1; }
         .close-btn:hover { color: #000; }
         .modal-actions { display: flex; justify-content: flex-end; gap: 10px; margin-top: 20px; }
-        
-        .msg-text a { color: #007bff; text-decoration: underline; }
-        .msg-text a:hover { color: #0056b3; }
-        .note-hint { font-size: 0.85em; color: #666; margin-bottom: 5px; }
     </style>
 </head>
 <body>
     <header>
-        <h1>Global Discussion Group ChatRoom v2</h1>
+        <h1>Global Discussion Group ChatRoom</h1>
     </header>
 
     <main>
         <div class="welcome-container">
             <p class="welcome-text">Welcome to the real-time chatroom for all GDG members..</p>
             <button id="settings-icon" class="settings-btn" title="Settings" aria-label="Open Settings">
-<<<<<<< HEAD
-                <svg viewBox="0 0 24 24" width="18" height="18">
-                    <path d="M19.43 12.98c.04-.32.07-.64.07-.98s-.03-.66-.07-.98l2.11-1.65c.19-.15.24-.42.12-.64l-2-3.46c-.12-.22-.39-.3-.61-.22l-2.49 1c-.52-.4-1.08-.73-1.69-.98l-.38-2.65C14.46 2.18 14.25 2 14 2h-4c-.25 0-.46.18-.49.42l-.38 2.65c-.61.25-1.17.59-1.69.98l-2.49-1c-.23-.09-.49 0-.61.22l-2 3.46c-.13.22-.07.49.12.64l2.11 1.65c-.04.32-.07.65-.07.98s.03.66.07.98l-2.11 1.65c-.19.15-.24.42-.12.64l2 3.46c.12.22.39.3.61.22l2.49-1c.52.4 1.08.73 1.69-.98l.38-2.65c.03-.24.24-.42.49-.42h4c.25 0 .46.18.49.42l.38-2.65c.61-.25 1.17-.59 1.69-.98l2.49 1c.23.09.49 0 .61-.22l2-3.46c.12-.22.07-.49-.12-.64l-2.11-1.65zM12 15.5c-1.93 0-3.5-1.57-3.5-3.5s1.57-3.5 3.5-3.5 3.5 1.57 3.5 3.5-1.57 3.5-3.5 3.5z"/>
-=======
                 <svg viewBox="0 0 24 24">
                     <path d="M19.14,12.94c0.04-0.3,0.06-0.61,0.06-0.94c0-0.32-0.02-0.64-0.07-0.94l2.03-1.58c0.18-0.14,0.23-0.41,0.12-0.61 l-1.92-3.32c-0.12-0.22-0.37-0.29-0.59-0.22l-2.39,0.96c-0.5-0.38-1.03-0.7-1.62-0.94L14.4,2.81C14.36,2.58,14.17,2.4,13.93,2.4 h-3.87c-0.24,0-0.43,0.17-0.47,0.41L9.21,5.35C8.63,5.6,8.1,5.92,7.6,6.3L5.21,5.34c-0.22-0.08-0.47,0-0.59,0.22L2.69,8.87 C2.57,9.08,2.62,9.35,2.8,9.48l2.03,1.58C4.79,11.37,4.77,11.69,4.77,12c0,0.31,0.02,0.63,0.06,0.94L2.8,14.52 c-0.18,0.14-0.23,0.41-0.12,0.61l1.92,3.32c0.12,0.22,0.37,0.29,0.59,0.22l2.39-0.96c0.5,0.38,1.03,0.7,1.62,0.94l0.36,2.54 c0.05,0.24,0.24,0.41,0.48,0.41h3.87c0.24,0,0.43-0.17,0.47-0.41l0.36-2.54c0.59-0.24,1.13-0.56,1.62-0.94l2.39,0.96 c0.22,0.08,0.47,0,0.59-0.22l1.92-3.32c0.12-0.22,0.07-0.47-0.12-0.61L19.14,12.94z M12,15.6c-1.98,0-3.6-1.62-3.6-3.6 s1.62-3.6,3.6-3.6s3.6,1.62,3.6,3.6S13.98,15.6,12,15.6z"/>
->>>>>>> 1c5fbbdbc97c68588038f3b19487a7d9a109bf36
                 </svg>
             </button>
         </div>
 
-        <p id="history-status">System: History being loaded from server...</p>
+        <p id="history-status">System: History being loaded.</p>
 
         <div id="chat-area">
-            <div id="chat-log" role="log" aria-label="Chat Log History"></div>
+            <div id="chat-log" role="log"></div>
             <div class="input-group">
-                <label for="message-input">Message</label>
-                <div class="note-hint">※送信: Enterキー / 改行: Shift + Enterキー (URLは自動リンク)</div>
-                <textarea id="message-input" placeholder="Type a message..."></textarea>
+                <input type="text" id="message-input" placeholder="Type a message...">
             </div>
             <button id="send-btn">Send</button>
         </div>
@@ -335,12 +302,16 @@ HTML_TEMPLATE = """
             document.getElementById('settings-password').value = savedPassword;
             document.getElementById('settings-name').value = savedName;
             document.getElementById('settings-timestamp').checked = savedTimestamp;
+
+            renderLocalHistory();
+
+            setTimeout(() => {
+                const statusMessage = document.getElementById('history-status');
+                if (statusMessage) statusMessage.remove();
+            }, 1500);
         });
 
-<<<<<<< HEAD
-=======
         // メッセージ送信の共通関数
->>>>>>> 1c5fbbdbc97c68588038f3b19487a7d9a109bf36
         function sendMessage() {
             const input = document.getElementById('message-input');
             const message = input.value.trim();
@@ -359,58 +330,50 @@ HTML_TEMPLATE = """
             }
         }
 
-<<<<<<< HEAD
-        document.getElementById('send-btn').addEventListener('click', sendMessage);
-
-        // 【変更】Enterキーで送信、Shift + Enter キーで改行する処理
-        document.getElementById('message-input').addEventListener('keydown', (e) => {
-            if (e.key === 'Enter') {
-                if (e.shiftKey) {
-                    // Shift + Enter の場合は改行を許可する
-                    return;
-                } else {
-                    // Enter のみの場合は送信する
-                    e.preventDefault();
-                    sendMessage();
-                }
-=======
         // Sendボタンクリックでの送信
         document.getElementById('send-btn').addEventListener('click', sendMessage);
 
-        // 入力欄でのキーイベントコントロール
+        // 入力欄でのEnterキー押下時の送信コントロール
         document.getElementById('message-input').addEventListener('keydown', function(event) {
+            // IME確定時のEnterでの誤送信を防ぐ判定
             if (event.isComposing || event.keyCode === 229) return;
 
-            // ユーザーの要望：入力欄で Shift + Tab を押したとき、最も新しいメッセージ（一番下）にダイレクトにフォーカスさせる
-            if (event.key === 'Tab' && event.shiftKey) {
-                const messages = document.querySelectorAll('#chat-log .message');
-                if (messages.length > 0) {
-                    event.preventDefault(); // デフォルトのタブ移動（ボタンへの移動など）を無効化
-                    messages[messages.length - 1].focus(); // 最も新しいメッセージにフォーカス
-                }
-                return;
+            // 【設定方法の切り替え】
+            // パターンA: 通常のEnterだけで送信する場合 (デフォルト)
+            if (event.key === 'Enter' && !event.shiftKey && !event.ctrlKey) {
+                event.preventDefault(); // 改行を防ぐ
+                sendMessage();
             }
 
-            // 通常のEnterだけで送信する場合
-            if (event.key === 'Enter' && !event.shiftKey && !event.ctrlKey) {
-                event.preventDefault(); 
+            // パターンB: もし「Ctrl + Enter」だけで送信させたい場合は、上のパターンAをコメントアウトし、下の3行を有効にしてください
+            /*
+            if (event.key === 'Enter' && event.ctrlKey) {
+                event.preventDefault();
                 sendMessage();
->>>>>>> 1c5fbbdbc97c68588038f3b19487a7d9a109bf36
             }
+            */
+
+            // パターンC: もし「Shift + Enter」だけで送信させたい場合は、下の3行を有効にしてください
+            /*
+            if (event.key === 'Enter' && event.shiftKey) {
+                event.preventDefault();
+                sendMessage();
+            }
+            */
         });
 
         socket.on('load_history', function(history) {
             const statusMessage = document.getElementById('history-status');
             if (statusMessage) statusMessage.remove();
             
-            if (Array.isArray(history)) {
+            if (Array.isArray(history) && history.length > 0) {
                 const standardHistory = history.slice(-MAX_HISTORY).map(item => ({
                     name: item.name || item.user || item.username || 'Anonymous',
                     msg: item.msg || item.message || '',
                     timestamp: item.timestamp || item.time || new Date().toISOString()
                 }));
                 localStorage.setItem('chat_history_data', JSON.stringify(standardHistory));
-                renderHistoryList(standardHistory);
+                renderLocalHistory();
             }
         });
 
@@ -427,77 +390,41 @@ HTML_TEMPLATE = """
             return `${yyyy}/${mm}/${dd} ${hh}:${min}`;
         }
 
-        function escapeHtml(str) {
-            return str
-                .replace(/&/g, "&amp;")
-                .replace(/</g, "&lt;")
-                .replace(/>/g, "&gt;")
-                .replace(/"/g, "&quot;")
-                .replace(/'/g, "&#039;");
-        }
-
-        function formatMessageText(text) {
-            const safeText = escapeHtml(text);
-            const urlRegex = /(https?:\/\/[^\s]+)/g;
-            const linkedText = safeText.replace(urlRegex, function(url) {
-                return '<a href="' + url + '" target="_blank" rel="noopener noreferrer">' + url + '</a>';
-            });
-            return linkedText.replace(/\\n/g, '<br>').replace(/\\r\\n/g, '<br>').replace(/\\r/g, '<br>');
-        }
-
         function createMessageElement(data) {
             const messageElement = document.createElement('div');
             messageElement.classList.add('message');
             
-            // 重要：メッセージ全体をスクリーンリーダーが認識・移動できるように tabindex="0" を付与
-            messageElement.setAttribute('tabindex', '0');
-            
-            const name = data.name || 'Anonymous';
-            const showTimestamp = localStorage.getItem('chat_timestamp') === 'true';
-            const timeFormatted = showTimestamp ? formatTimestamp(data.timestamp) : '';
-            
-            // スクリーンリーダーが一文として滑らかに読み上げられるよう、読み上げ用テキストをaria-labelとして設定
-            const ariaText = `${name} says: ${data.msg}. ${showTimestamp ? 'Sent at ' + timeFormatted : ''}`;
-            messageElement.setAttribute('aria-label', ariaText);
-
-            // ビジュアル用の構造（画面表示用）
             const metaElement = document.createElement('div');
             metaElement.classList.add('msg-meta');
-            metaElement.setAttribute('aria-hidden', 'true'); // スクリーンリーダーの二重読みを防ぐ
             
             const nameSpan = document.createElement('span');
             nameSpan.classList.add('msg-user');
-            nameSpan.textContent = name;
+            nameSpan.textContent = data.name || 'Anonymous';
             metaElement.appendChild(nameSpan);
 
+            const showTimestamp = localStorage.getItem('chat_timestamp') === 'true';
             if (showTimestamp) {
                 const timeSpan = document.createElement('span');
                 timeSpan.classList.add('timestamp');
-                timeSpan.textContent = timeFormatted;
+                timeSpan.textContent = formatTimestamp(data.timestamp);
                 metaElement.appendChild(timeSpan);
             }
             
             messageElement.appendChild(metaElement);
 
-            const textElement = document.createElement('div');
-            textElement.classList.add('msg-text');
+            const textElement = document.createElement('span');
             textElement.style.color = '#333';
-<<<<<<< HEAD
-            textElement.style.wordBreak = 'break-all';
-            textElement.innerHTML = formatMessageText(data.msg);
-=======
             textElement.textContent = data.msg;
-            textElement.setAttribute('aria-hidden', 'true'); // スクリーンリーダーの二重読みを防ぐ
->>>>>>> 1c5fbbdbc97c68588038f3b19487a7d9a109bf36
             messageElement.appendChild(textElement);
             
             return messageElement;
         }
 
-        function renderHistoryList(historyLog) {
+        function renderLocalHistory() {
             const chatLog = document.getElementById('chat-log');
             chatLog.innerHTML = '';
             
+            const historyLog = JSON.parse(localStorage.getItem('chat_history_data')) || [];
             historyLog.forEach(data => {
                 const elem = createMessageElement(data);
                 chatLog.appendChild(elem);
@@ -519,6 +446,7 @@ HTML_TEMPLATE = """
             chatLog.appendChild(elem);
             chatLog.scrollTop = chatLog.scrollHeight;
 
+            // 新着メッセージ受信時に通知音をトリガー
             playDingDong();
 
             let historyLog = JSON.parse(localStorage.getItem('chat_history_data')) || [];
@@ -556,9 +484,7 @@ HTML_TEMPLATE = """
             localStorage.setItem('chat_name', name);
             localStorage.setItem('chat_timestamp', timestampChecked);
 
-            const currentHistory = JSON.parse(localStorage.getItem('chat_history_data')) || [];
-            renderHistoryList(currentHistory);
-            
+            renderLocalHistory();
             alert("Settings saved!");
             closeModal();
         });
@@ -575,7 +501,7 @@ def index():
     return render_template_string(HTML_TEMPLATE)
 
 # -------------------------------------------------------------------------
-# Socket.IO イベントハンドラ定義
+# Socket.IO イベントハンドラ定義（バックエンド処理の実装）
 # -------------------------------------------------------------------------
 @socketio.on('connect')
 def handle_connect():
@@ -585,10 +511,7 @@ def handle_connect():
 
 @socketio.on('send_message')
 def handle_send_message(data):
-<<<<<<< HEAD
-=======
     """メッセージを受信し、DBへの保存と全クライアントへのリアルタイムブロードキャストを行う"""
->>>>>>> 1c5fbbdbc97c68588038f3b19487a7d9a109bf36
     msg_content = data.get('msg') or data.get('message', '')
     user_name = data.get('name') or data.get('user') or data.get('username', 'Anonymous')
     
