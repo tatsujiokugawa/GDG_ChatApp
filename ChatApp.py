@@ -14,17 +14,27 @@ SUPABASE_KEY = "eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJpc3MiOiJzdXBhYmFzZSIsInJ
 # Supabaseクライアントの初期化
 supabase: Client = create_client(SUPABASE_URL, SUPABASE_KEY)
 
+# def load_server_history():
+#     """Supabaseから直接メッセージ履歴を最大100件取得する"""
+#     try:
+#         # 古い順（昇順）で取得
+#         response = supabase.table("").select("*").order("timestamp", desc=False).limit(100).execute()
+#         print(f"Loaded history from Supabase: {len(response.data) if response.data else 0} messages")
+#         return response.data if response.data else []
+#     except Exception as e:
+#         print(f"❌ Error loading history from Supabase: {e}")
+#         return []
 def load_server_history():
     """Supabaseから直接メッセージ履歴を最大100件取得する"""
     try:
-        # 古い順（昇順）で取得
-        response = supabase.table("messages").select("*").order("timestamp", desc=False).limit(100).execute()
+        # 古い順（昇順）で取得（テーブル名を "chat_messages" に、順序の基準を "time_str" に修正）
+        response = supabase.table("chat_messages").select("*").order("time_str", desc=False).limit(100).execute()
         print(f"Loaded history from Supabase: {len(response.data) if response.data else 0} messages")
         return response.data if response.data else []
     except Exception as e:
         print(f"❌ Error loading history from Supabase: {e}")
         return []
-
+    
 HTML_TEMPLATE = r"""
 <!DOCTYPE html>
 <html lang="en">
@@ -378,6 +388,34 @@ def handle_connect():
     history = load_server_history()
     emit('load_history', history)
 
+# @socketio.on('send_message')
+# def handle_message(data):
+#     msg = data.get('msg', '').strip()
+#     if not msg:
+#         return
+        
+#     name = data.get('name', 'Anonymous')
+#     JST = timezone(timedelta(hours=+9), 'JST')
+#     timestamp = datetime.now(JST).isoformat()
+    
+#     message_data = {
+#         'name': name,
+#         'msg': msg,
+#         'timestamp': timestamp
+#     }
+    
+#     # Supabaseの 'messages' テーブルへ直接保存（インサート）
+#     # try:
+#     #     response = supabase.table("chat_messages).insert(message_data).execute()
+#     #     print(f"✅ Successfully saved to Supabase: {response}")
+#     try:
+#         response = supabase.table("chat_messages").insert(message_data).execute()
+#         print(f"✅ Successfully saved to Supabase: {response}")
+#     except Exception as e:
+#         print(f"❌ Error saving to Supabase: {e}")
+    
+#     # 全員にブロードキャスト送信
+#     socketio.emit('receive_message', message_data)
 @socketio.on('send_message')
 def handle_message(data):
     msg = data.get('msg', '').strip()
@@ -388,22 +426,27 @@ def handle_message(data):
     JST = timezone(timedelta(hours=+9), 'JST')
     timestamp = datetime.now(JST).isoformat()
     
+    # Supabaseの実際のカラム名（username, msg, time_str）に合わせる
     message_data = {
-        'name': name,
+        'username': name,
         'msg': msg,
-        'timestamp': timestamp
+        'time_str': timestamp
     }
     
-    # Supabaseの 'messages' テーブルへ直接保存（インサート）
+    # Supabaseの 'chat_messages' テーブルへ保存
     try:
-        response = supabase.table("messages").insert(message_data).execute()
+        response = supabase.table("chat_messages").insert(message_data).execute()
         print(f"✅ Successfully saved to Supabase: {response}")
     except Exception as e:
         print(f"❌ Error saving to Supabase: {e}")
     
-    # 全員にブロードキャスト送信
-    socketio.emit('receive_message', message_data)
-
+    # ブラウザ側に送るデータ（画面表示用にはこれまで通り元のキー名で送信してもOKです）
+    socketio.emit('receive_message', {
+        'name': name,
+        'msg': msg,
+        'timestamp': timestamp
+    })
+    
 if __name__ == '__main__':
     port = int(os.environ.get("PORT", 5000))
     socketio.run(app, host='0.0.0.0', port=port, debug=True, allow_unsafe_werkzeug=True)
