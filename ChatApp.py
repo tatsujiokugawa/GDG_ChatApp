@@ -144,8 +144,8 @@ init_db()
 
 # Completely English & Accessibility-friendly HTML Template (V6)
 
-HTML_TEMPLATE = """
 # -------------------------------------------------------------------------
+HTML_TEMPLATE = """
 <!DOCTYPE html>
 <html lang="en">
 <head>
@@ -236,10 +236,9 @@ HTML_TEMPLATE = """
             <div id="chat-log" role="log" aria-label="Chat Log History"></div>
             <div class="input-group">
                 <label for="message-input">Message</label>
-                <small>Press Enter to send (URLs are auto-linked)</small>
+                <small>Press Enter to send / Shift + Enter for a new line (URLs are auto-linked)</small>
                 <textarea id="message-input" placeholder="Type a message..."></textarea>
             </div>
-            <button id="send-btn" style="padding: 8px 16px; font-size: 15px; cursor: pointer; background: #007bff; color: white; border: none; border-radius: 4px; margin-top: 5px;">Send</button>
         </div>
     </main>
 
@@ -322,7 +321,7 @@ HTML_TEMPLATE = """
             const input = document.getElementById('message-input');
             const message = input.value.trim();
             const name = localStorage.getItem('chat_name') || 'Anonymous';
-            const password = localStorage.getItem('chat_password'] || '';
+            const password = localStorage.getItem('chat_password') || '';
             
             if (message !== "") {
                 socket.emit('send_message', { 
@@ -336,11 +335,7 @@ HTML_TEMPLATE = """
             }
         }
 
-        // --- 送信ボタンとEnterキー・Tabキーの操作設定 ---
-        document.getElementById('send-btn').addEventListener('click', () => {
-            sendMessage();
-        });
-
+        // --- Enterキーによる送信（Shift + Enterで改行）と Tab移動の設定 ---
         document.getElementById('message-input').addEventListener('keydown', function(event) {
             // Tab / Shift + Tab によるフォーカス移動
             if (event.key === 'Tab' && event.shiftKey) {
@@ -352,10 +347,14 @@ HTML_TEMPLATE = """
                 return;
             }
 
-            // Enterキーが押されたら強制的に送信する
+            // Enterキーの処理
             if (event.key === 'Enter') {
-                event.preventDefault();
-                sendMessage();
+                if (event.shiftKey) {
+                    return; // Shift + Enter の場合は改行を許可
+                } else {
+                    event.preventDefault();
+                    sendMessage(); // Enter単体の場合は送信
+                }
             }
         });
 
@@ -520,8 +519,9 @@ HTML_TEMPLATE = """
     </script>
 </body>
 </html>
-# -------------------------------------------------------------------------
 """
+# -------------------------------------------------------------------------
+
 # -------------------------------------------------------------------------
 # Flask ルーティング定義
 # -------------------------------------------------------------------------
