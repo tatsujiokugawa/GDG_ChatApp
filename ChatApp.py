@@ -2,6 +2,7 @@ import os
 from flask import Flask, render_template_string
 from flask_socketio import SocketIO, emit
 from supabase import create_client, Client
+from datetime import datetime, timezone, timedelta
 
 app = Flask(__name__)
 socketio = SocketIO(app, cors_allowed_origins="*")
@@ -16,10 +17,12 @@ supabase: Client = create_client(SUPABASE_URL, SUPABASE_KEY)
 def load_server_history():
     """Supabaseから直接メッセージ履歴を最大100件取得する"""
     try:
+        # 古い順（昇順）で取得
         response = supabase.table("messages").select("*").order("timestamp", desc=False).limit(100).execute()
+        print(f"Loaded history from Supabase: {len(response.data) if response.data else 0} messages")
         return response.data if response.data else []
     except Exception as e:
-        print(f"Error loading history from Supabase: {e}")
+        print(f"❌ Error loading history from Supabase: {e}")
         return []
 
 HTML_TEMPLATE = r"""
@@ -61,7 +64,7 @@ HTML_TEMPLATE = r"""
         .settings-btn { 
             background: #f8f9fa; 
             border: 1px solid #ced4da; 
-            padding: 0;       
+            padding: 0;     
             cursor: pointer; 
             display: inline-flex; 
             align-items: center; 
@@ -351,7 +354,7 @@ HTML_TEMPLATE = r"""
 
         document.getElementById('save-settings-btn').addEventListener('click', function() {
             const pwd = document.getElementById('settings-password').value;
-            const name = document.getElementById('settings-name').value;
+            const name = document.getElementById('settings-name', name).value;
             const timestampChecked = document.getElementById('settings-timestamp').checked;
 
             localStorage.setItem('chat_password', pwd);
@@ -382,7 +385,6 @@ def handle_message(data):
         return
         
     name = data.get('name', 'Anonymous')
-    from datetime import datetime, timezone, timedelta
     JST = timezone(timedelta(hours=+9), 'JST')
     timestamp = datetime.now(JST).isoformat()
     
@@ -394,15 +396,14 @@ def handle_message(data):
     
     # Supabaseの 'messages' テーブルへ直接保存（インサート）
     try:
-        supabase.table("messages").insert(message_data).execute()
+        response = supabase.table("messages").insert(message_data).execute()
+        print(f"✅ Successfully saved to Supabase: {response}")
     except Exception as e:
-        print(f"Error saving to Supabase: {e}")
+        print(f"❌ Error saving to Supabase: {e}")
     
     # 全員にブロードキャスト送信
     socketio.emit('receive_message', message_data)
 
-# if __name__ == '__main__':
-#     socketio.run(app, host='0.0.0.0', port=5000, debug=True, allow_unsafe_werkzeug=True)
 if __name__ == '__main__':
     port = int(os.environ.get("PORT", 5000))
     socketio.run(app, host='0.0.0.0', port=port, debug=True, allow_unsafe_werkzeug=True)
