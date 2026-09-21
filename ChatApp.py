@@ -196,7 +196,7 @@ HTML_TEMPLATE = """
             border-radius: 50%;
         }
         .settings-btn:hover { background: #eee; transform: rotate(45deg); }
-        .settings-btn svg { width: 22px; height: 22px; fill: #333; display: block; }
+        .settings-btn svg { width: 24px; height: 24px; fill: #333; display: block; }
         
         #history-status { color: #666; font-style: italic; margin: 5px 0 15px 0; font-size: 0.9em; }
 
@@ -224,7 +224,7 @@ HTML_TEMPLATE = """
         <div class="welcome-container">
             <p class="welcome-text">Welcome to the real-time chatroom for all GDG members.</p>
             <button id="settings-icon" class="settings-btn" title="Settings" aria-label="Open Settings">
-                <svg viewBox="0 0 24 24">
+                <svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 24 24" width="24" height="24">
                     <path d="M19.43 12.98c.04-.32.07-.64.07-.98s-.03-.66-.07-.98l2.11-1.65c.19-.15.24-.42.12-.64l-2-3.46c-.12-.22-.39-.3-.61-.22l-2.49 1c-.52-.4-1.08-.73-1.69-.98l-.38-2.65C14.46 2.18 14.25 2 14 2h-4c-.25 0-.46.18-.49.42l-.38 2.65c-.61.25-1.17.59-1.69.98l-2.49-1c-.23-.09-.49 0-.61.22l-2 3.46c-.13.22-.07.49.12.64l2.11 1.65c-.04.32-.07.65-.07.98s.03.66.07.98l-2.11 1.65c-.19.15-.24.42-.12.64l2 3.46c.12.22.39.3.61.22l2.49-1c.52.4 1.08.73 1.69-.98l.38-2.65c.03-.24.24-.42.49-.42h4c.25 0 .46.18.49.42l.38-2.65c.61-.25 1.17-.59 1.69-.98l2.49 1c.23.09.49 0 .61-.22l2-3.46c.12-.22.07-.49-.12-.64l-2.11-1.65zM12 15.5c-1.93 0-3.5-1.57-3.5-3.5s1.57-3.5 3.5-3.5 3.5 1.57 3.5 3.5-1.57 3.5-3.5 3.5z"/>
                 </svg>
             </button>
@@ -311,6 +311,7 @@ HTML_TEMPLATE = """
             document.getElementById('settings-name').value = savedName;
             document.getElementById('settings-timestamp').checked = savedTimestamp;
 
+            // ローカルストレージに履歴があれば初期表示しておく
             const cachedHistory = JSON.parse(localStorage.getItem('chat_history_data'));
             if (cachedHistory && Array.isArray(cachedHistory) && cachedHistory.length > 0) {
                 renderHistoryList(cachedHistory);
@@ -335,9 +336,8 @@ HTML_TEMPLATE = """
             }
         }
 
-        // --- Enterキーによる送信（Shift + Enterで改行）と Tab移動の設定 ---
+        // Enterキーによる送信（Shift + Enterで改行）と Tab移動の設定
         document.getElementById('message-input').addEventListener('keydown', function(event) {
-            // Tab / Shift + Tab によるフォーカス移動
             if (event.key === 'Tab' && event.shiftKey) {
                 const messages = document.querySelectorAll('#chat-log .message');
                 if (messages.length > 0) {
@@ -347,10 +347,9 @@ HTML_TEMPLATE = """
                 return;
             }
 
-            // Enterキーの処理
             if (event.key === 'Enter') {
                 if (event.shiftKey) {
-                    return; // Shift + Enter の場合は改行を許可
+                    return; // Shift + Enter の場合は改行
                 } else {
                     event.preventDefault();
                     sendMessage(); // Enter単体の場合は送信
@@ -362,7 +361,7 @@ HTML_TEMPLATE = """
             const statusMessage = document.getElementById('history-status');
             if (statusMessage) statusMessage.remove();
             
-            if (Array.isArray(history)) {
+            if (Array.isArray(history) && history.length > 0) {
                 const standardHistory = history.slice(-MAX_HISTORY).map(item => ({
                     name: item.name || item.user || item.username || 'Anonymous',
                     msg: item.msg || item.message || '',
