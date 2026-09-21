@@ -269,7 +269,8 @@ HTML_TEMPLATE = r"""
             const linkedText = safeText.replace(urlRegex, function(url) {
                 return '<a href="' + url + '" target="_blank" rel="noopener noreferrer">' + url + '</a>';
             });
-            return linkedText.replace(/\\n/g, '<br>').replace(/\\r\\n/g, '<br>').replace(/\\r/g, '<br>');
+            // 改行コード（\n）をHTMLの <br> に正しく変換するよう修正
+            return linkedText.replace(/\r\n/g, '<br>').replace(/\n/g, '<br>').replace(/\r/g, '<br>');
         }
 
         function createMessageElement(data) {
@@ -385,7 +386,7 @@ def index():
 
 @socketio.on('connect')
 def handle_connect():
-    # 接続時にサーバー側のファイルから読み込んだ履歴を送信
+    # 接続時にサーバー側のファイルから読み込んだ履歴を送信（ファイルがない場合は空のリストを確実に返す）
     emit('load_history', message_history)
 
 @socketio.on('send_message')
