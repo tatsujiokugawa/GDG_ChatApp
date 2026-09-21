@@ -146,9 +146,24 @@ init_db()
 
 # -------------------------------------------------------------------------
 HTML_TEMPLATE = """
-git add ChatApp.py
-git commit -m "Force Enter key to send message bypassing newline"
-git push origin main --force-with-lease
+// キーボード入力欄の設定（Enterキーでの送信を最優先・強制実行）
+        document.getElementById('message-input').addEventListener('keydown', function(event) {
+            // Tab / Shift + Tab によるフォーカス移動は維持
+            if (event.key === 'Tab' && event.shiftKey) {
+                const messages = document.querySelectorAll('#chat-log .message');
+                if (messages.length > 0) {
+                    event.preventDefault();
+                    messages[messages.length - 1].focus();
+                }
+                return;
+            }
+
+            // Enterキーが押されたら、改行のデフォルト動作を完全に潰して送信する
+            if (event.key === 'Enter') {
+                event.preventDefault();
+                sendMessage();
+            }
+        });
 
 """
 
