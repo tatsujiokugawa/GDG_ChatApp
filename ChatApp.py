@@ -306,7 +306,7 @@ HTML_TEMPLATE = r"""
             const textElement = document.createElement('div');
             textElement.classList.add('msg-text');
             textElement.style.color = '#333';
-            textElement.style.wordBreak = 'break-all';
+            textElement.style.wordBreak = 'break-word';
             textElement.innerHTML = formatMessageText(data.msg);
 
             messageElement.appendChild(textElement);
