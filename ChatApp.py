@@ -33,7 +33,7 @@ def save_server_history(history):
 # 起動時に履歴を読み込み
 message_history = load_server_history()
 
-HTML_TEMPLATE = """
+HTML_TEMPLATE = r"""
 <!DOCTYPE html>
 <html lang="en">
 <head>
@@ -418,4 +418,4 @@ def handle_message(data):
     socketio.emit('receive_message', message_data)
 
 if __name__ == '__main__':
-    socketio.run(app, host='0.0.0.0', port=5000, debug=True)
+    socketio.run(app, host='0.0.0.0', port=5000, debug=True, allow_unsafe_werkzeug=True)
