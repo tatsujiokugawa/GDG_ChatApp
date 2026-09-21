@@ -1,37 +1,26 @@
 import os
-import json
 from flask import Flask, render_template_string
 from flask_socketio import SocketIO, emit
+from supabase import create_client, Client
 
 app = Flask(__name__)
 socketio = SocketIO(app, cors_allowed_origins="*")
 
-# 履歴を保存するファイル名
-HISTORY_FILE = "chat_history.json"
-MAX_HISTORY = 100
+# ご提示いただいたSupabaseの接続情報
+SUPABASE_URL = "https://lkixnehkduusziskeufz.supabase.co"
+SUPABASE_KEY = "eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJpc3MiOiJzdXBhYmFzZSIsInJlZiI6ImxraXhuZWhrZHV1c3ppc2tldWZ6Iiwicm9sZSI6ImFub24iLCJpYXQiOjE3ODIyNjY0MjMsImV4cCI6MjA5Nzg0MjQyM30.LkBvg6pa1Ub91idPApT1ri3UyYNpuWfWYsf6lvBVxpU"
+
+# Supabaseクライアントの初期化
+supabase: Client = create_client(SUPABASE_URL, SUPABASE_KEY)
 
 def load_server_history():
-    """サーバー側でファイルから履歴を読み込む"""
-    if os.path.exists(HISTORY_FILE):
-        try:
-            with open(HISTORY_FILE, "r", encoding="utf-8") as f:
-                data = json.load(f)
-                if isinstance(data, list):
-                    return data
-        except Exception as e:
-            print(f"Error loading history file: {e}")
-    return []
-
-def save_server_history(history):
-    """サーバー側でファイルへ履歴を保存する"""
+    """Supabaseから直接メッセージ履歴を最大100件取得する"""
     try:
-        with open(HISTORY_FILE, "w", encoding="utf-8") as f:
-            json.dump(history, f, ensure_ascii=False, indent=2)
+        response = supabase.table("messages").select("*").order("timestamp", desc=False).limit(100).execute()
+        return response.data if response.data else []
     except Exception as e:
-        print(f"Error saving history file: {e}")
-
-# 起動時に履歴を読み込み
-message_history = load_server_history()
+        print(f"Error loading history from Supabase: {e}")
+        return []
 
 HTML_TEMPLATE = r"""
 <!DOCTYPE html>
@@ -39,7 +28,7 @@ HTML_TEMPLATE = r"""
 <head>
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
-    <title>Global Discussion Group ChatRoom v2.1</title>
+    <title>Global Discussion Group ChatRoom v3.0 (Supabase)</title>
     <script src="https://cdn.socket.io/4.7.5/socket.io.min.js"></script>
     
     <style>
@@ -69,7 +58,6 @@ HTML_TEMPLATE = r"""
         .welcome-container { display: flex; align-items: center; justify-content: space-between; margin-bottom: 10px; gap: 10px; }
         .welcome-text { font-size: 1em; font-weight: bold; margin: 0; flex-grow: 1; }
         
-        /* 歯車アイコンボタンのスタイリング（完全に中央配置して切れないように修正） */
         .settings-btn { 
             background: #f8f9fa; 
             border: 1px solid #ced4da; 
@@ -97,13 +85,19 @@ HTML_TEMPLATE = r"""
         .modal-actions button { padding: 8px 16px; font-size: 15px; cursor: pointer; background: #007bff; color: white; border: none; border-radius: 4px; }
         .modal-actions button:hover { background: #0056b3; }
         
+        .msg-text { 
+            color: #333; 
+            overflow-wrap: break-word; 
+            word-break: normal; 
+            line-height: 1.4;
+        }
         .msg-text a { color: #007bff; text-decoration: underline; }
         .msg-text a:hover { color: #0056b3; }
     </style>
 </head>
 <body>
     <header>
-        <h1>Global Discussion Group ChatRoom v2</h1>
+        <h1>Global Discussion Group ChatRoom v3</h1>
     </header>
 
     <main>
@@ -151,7 +145,6 @@ HTML_TEMPLATE = r"""
     </div>
 
     <script>
-        const MAX_HISTORY = 100;
         const socket = io({ transports: ['polling'] });
 
         function playDingDong() {
@@ -206,8 +199,6 @@ HTML_TEMPLATE = r"""
                 socket.emit('send_message', { 
                     msg: message, 
                     name: name,
-                    user: name,
-                    username: name,
                     password: password 
                 });
                 input.value = ''; 
@@ -234,7 +225,6 @@ HTML_TEMPLATE = r"""
             }
         });
 
-        // サーバーから履歴を受け取って表示
         socket.on('load_history', function(history) {
             if (Array.isArray(history)) {
                 renderHistoryList(history);
@@ -269,7 +259,6 @@ HTML_TEMPLATE = r"""
             const linkedText = safeText.replace(urlRegex, function(url) {
                 return '<a href="' + url + '" target="_blank" rel="noopener noreferrer">' + url + '</a>';
             });
-            // 改行コード（\n）をHTMLの <br> に正しく変換するよう修正
             return linkedText.replace(/\r\n/g, '<br>').replace(/\n/g, '<br>').replace(/\r/g, '<br>');
         }
 
@@ -305,8 +294,6 @@ HTML_TEMPLATE = r"""
 
             const textElement = document.createElement('div');
             textElement.classList.add('msg-text');
-            textElement.style.color = '#333';
-            textElement.style.wordBreak = 'break-word';
             textElement.innerHTML = formatMessageText(data.msg);
 
             messageElement.appendChild(textElement);
@@ -324,15 +311,14 @@ HTML_TEMPLATE = r"""
             chatLog.scrollTop = chatLog.scrollHeight;
         }
 
-        // 新着メッセージ受信時
         socket.on('receive_message', function(data) {
             const chatLog = document.getElementById('chat-log');
-            const incomingName = data.name || data.user || data.username || 'Anonymous';
+            const incomingName = data.name || 'Anonymous';
             
             const messageData = {
                 name: incomingName,
-                msg: data.msg || data.message || '',
-                timestamp: data.timestamp || data.time || new Date().toISOString()
+                msg: data.msg || '',
+                timestamp: data.timestamp || new Date().toISOString()
             };
 
             const elem = createMessageElement(messageData);
@@ -372,7 +358,6 @@ HTML_TEMPLATE = r"""
             localStorage.setItem('chat_name', name);
             localStorage.setItem('chat_timestamp', timestampChecked);
 
-            // 設定変更時に画面を再描画してタイムスタンプ表示などを反映
             location.reload();
         });
     </script>
@@ -386,12 +371,12 @@ def index():
 
 @socketio.on('connect')
 def handle_connect():
-    # 接続時にサーバー側のファイルから読み込んだ履歴を送信（ファイルがない場合は空のリストを確実に返す）
-    emit('load_history', message_history)
+    # 接続時にSupabaseから履歴を取得して送信
+    history = load_server_history()
+    emit('load_history', history)
 
 @socketio.on('send_message')
 def handle_message(data):
-    global message_history
     msg = data.get('msg', '').strip()
     if not msg:
         return
@@ -407,16 +392,17 @@ def handle_message(data):
         'timestamp': timestamp
     }
     
-    # 履歴に追加し、最大100件を超えたら古いものを削除
-    message_history.append(message_data)
-    if len(message_history) > MAX_HISTORY:
-        message_history = message_history[-MAX_HISTORY:]
-        
-    # ファイルに永続保存
-    save_server_history(message_history)
+    # Supabaseの 'messages' テーブルへ直接保存（インサート）
+    try:
+        supabase.table("messages").insert(message_data).execute()
+    except Exception as e:
+        print(f"Error saving to Supabase: {e}")
     
     # 全員にブロードキャスト送信
     socketio.emit('receive_message', message_data)
 
+# if __name__ == '__main__':
+#     socketio.run(app, host='0.0.0.0', port=5000, debug=True, allow_unsafe_werkzeug=True)
 if __name__ == '__main__':
-    socketio.run(app, host='0.0.0.0', port=5000, debug=True, allow_unsafe_werkzeug=True)
+    port = int(os.environ.get("PORT", 5000))
+    socketio.run(app, host='0.0.0.0', port=port, debug=True, allow_unsafe_werkzeug=True)
