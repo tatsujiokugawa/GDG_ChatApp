@@ -192,19 +192,66 @@ HTML_TEMPLATE = r"""
             }
         }
 
+// 1. ページ読み込み時に保存された設定をフォームに反映
         window.addEventListener('DOMContentLoaded', () => {
             const savedPassword = localStorage.getItem('chat_password') || '';
             const savedName = localStorage.getItem('chat_name') || '';
             const savedTimestamp = localStorage.getItem('chat_timestamp') === 'true';
 
-            document.getElementById('settings-password').value = savedPassword;
-            document.getElementById('settings-name').value = savedName;
-            document.getElementById('settings-timestamp').checked = savedTimestamp;
+            const nameInput = document.getElementById('settings-name');
+            const passwordInput = document.getElementById('settings-password');
+            const timestampCheckbox = document.getElementById('settings-timestamp');
+
+            if (nameInput) nameInput.value = savedName;
+            if (passwordInput) passwordInput.value = savedPassword;
+            if (timestampCheckbox) timestampCheckbox.checked = savedTimestamp;
+
+            // 2. 歯車アイコンで設定モーダルを開く処理（もし未設定であれば）
+            const settingsBtn = document.getElementById('settings-btn'); // 歯車ボタンのID
+            const settingsModal = document.getElementById('settings-modal');
+            if (settingsBtn && settingsModal) {
+                settingsBtn.addEventListener('click', () => {
+                    settingsModal.style.display = 'block';
+                    settingsModal.setAttribute('aria-hidden', 'false');
+                });
+            }
+
+            // 3. 閉じるボタン（×）でモーダルを非表示にする処理
+            const closeBtn = document.getElementById('close-modal-btn');
+            if (closeBtn && settingsModal) {
+                closeBtn.addEventListener('click', () => {
+                    settingsModal.style.display = 'none';
+                    settingsModal.setAttribute('aria-hidden', 'true');
+                });
+            }
+
+            // 4. 【追加】Saveボタンが押されたときの処理（保存 ＆ モーダルを閉じる）
+            const saveBtn = document.getElementById('save-settings-btn');
+            if (saveBtn && settingsModal) {
+                saveBtn.addEventListener('click', () => {
+                    // 入力値を chat_name などのキーで保存
+                    if (nameInput) {
+                        localStorage.setItem('chat_name', nameInput.value.trim());
+                    }
+                    if (passwordInput) {
+                        localStorage.setItem('chat_password', passwordInput.value);
+                    }
+                    if (timestampCheckbox) {
+                        localStorage.setItem('chat_timestamp', timestampCheckbox.checked);
+                    }
+
+                    // モーダルを非表示にして閉じる
+                    settingsModal.style.display = 'none';
+                    settingsModal.setAttribute('aria-hidden', 'true');
+                });
+            }
         });
 
+        // 5. メッセージ送信処理
         function sendMessage() {
             const input = document.getElementById('message-input');
             const message = input.value.trim();
+            // 常に最新の chat_name を取得するので Anonymous に戻らなくなります
             const name = localStorage.getItem('chat_name') || 'Anonymous';
             const password = localStorage.getItem('chat_password') || '';
             
