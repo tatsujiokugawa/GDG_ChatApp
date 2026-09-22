@@ -17,7 +17,6 @@ supabase: Client = create_client(SUPABASE_URL, SUPABASE_KEY)
 def load_server_history():
     """Supabaseから直接メッセージ履歴を最大100件取得する"""
     try:
-        # 保存しているキー名にあわせて 'timestamp' で昇順ソート
         response = supabase.table("chat_messages").select("*").order("timestamp", desc=False).limit(100).execute()
         print(f"Loaded history from Supabase: {len(response.data) if response.data else 0} messages")
         return response.data if response.data else []
@@ -148,29 +147,6 @@ HTML_TEMPLATE = r"""
     </div>
 
     <script>
-    document.addEventListener('DOMContentLoaded', function() {
-    const inputField = document.getElementById('message-input');
-    
-    if (!inputField) {
-        console.error("エラー: 'message-input' というIDの入力欄が見つかりません。");
-        return;
-    }
-
-    inputField.addEventListener('keydown', function(event) {
-        // Enterキーが押されたら、シフトキーの有無に関係なく強制的に送信する
-        if (event.key === 'Enter') {
-            event.preventDefault(); // 改行を防ぐ
-            
-            // すでに定義されている送信関数（例: sendMessage）を呼び出す
-            if (typeof sendMessage === 'function') {
-                sendMessage();
-            } else {
-                console.error("エラー: 送信用の関数（sendMessageなど）が見つかりません。");
-            }
-        }
-    });
-});
-
         const socket = io({ transports: ['polling'] });
 
         function playDingDong() {
@@ -231,347 +207,37 @@ HTML_TEMPLATE = r"""
             }
         }
 
-        document.getElementById('message-input').addEventListener('keydown', function(event) {
-            // 日本語変換中のEnterは無視する
-            if (event.isComposing || event.keyCode === 229) {
-                return;
-            }
-
-            if (event.key === 'Tab' && event.shiftKey) {
-                const messages = document.querySelectorAll('#chat-log .message');
-                if (messages.length > 0) {
-                    event.preventDefault();
-                    messages[messages.length - 1].focus();
-                }
-                return;
-            }
-
-            if (event.key === 'Enter') {
-                if (event.shiftKey) {
-                    return;
-                } else {
-                    event.preventDefault();
-                    sendMessage();
-                }
-            }
-        });
-
-        socket.on('load_history', function(history) {
-            if (Array.isArray(history)) {
-                renderHistoryList(history);
-            }
-        });
-
-        function formatTimestamp(dateStr) {
-            const date = dateStr ? new Date(dateStr) : new Date();
-            if (isNaN(date.getTime())) return dateStr;
-            
-            const yyyy = date.getFullYear();
-            const mm = String(date.getMonth() + 1).padStart(2, '0');
-            const dd = String(date.getDate()).padStart(2, '0');
-            const hh = String(date.getHours()).padStart(2, '0');
-            const min = String(date.getMinutes()).padStart(2, '0');
-            
-            return `${yyyy}/${mm}/${dd} ${hh}:${min}`;
-        }
-
-        function escapeHtml(str) {
-            return str
-                .replace(/&/g, "&amp;")
-                .replace(/</g, "&lt;")
-                .replace(/>/g, "&gt;")
-                .replace(/"/g, "&quot;")
-                .replace(/'/g, "&#039;");
-        }
-
-        function formatMessageText(text) {
-            const safeText = escapeHtml(text);
-            const urlRegex = /(https?:\/\/[^\s]+)/g;
-            const linkedText = safeText.replace(urlRegex, function(url) {
-                return '<a href="' + url + '" target="_blank" rel="noopener noreferrer">' + url + '</a>';
-            });
-            return linkedText.replace(/\r\n/g, '<br>').replace(/\n/g, '<br>').replace(/\r/g, '<br>');
-        }
-
-        function createMessageElement(data) {
-            const messageElement = document.createElement('div');
-            messageElement.classList.add('message');
-            messageElement.setAttribute('tabindex', '0');
-            
-            const name = data.name || 'Anonymous';
-            const showTimestamp = localStorage.getItem('chat_timestamp') === 'true';
-            const timeFormatted = showTimestamp ? formatTimestamp(data.timestamp) : '';
-            
-            const ariaText = `${name} says: ${data.msg}. ${showTimestamp ? 'Sent at ' + timeFormatted : ''}`;
-            messageElement.setAttribute('aria-label', ariaText);
-
-            const metaElement = document.createElement('div');
-            metaElement.classList.add('msg-meta');
-            metaElement.setAttribute('aria-hidden', 'true');
-            
-            const nameSpan = document.createElement('span');
-            nameSpan.classList.add('msg-user');
-            nameSpan.textContent = name;
-            metaElement.appendChild(nameSpan);
-
-            if (showTimestamp) {
-                const timeSpan = document.createElement('span');
-                timeSpan.classList.add('timestamp');
-                timeSpan.textContent = timeFormatted;
-                metaElement.appendChild(timeSpan);
-            }
-            
-            messageElement.appendChild(metaElement);
-
-            const textElement = document.createElement('div');
-            textElement.classList.add('msg-text');
-            textElement.innerHTML = formatMessageText(data.msg);
-
-            messageElement.appendChild(textElement);
-            return messageElement;
-        }
-
-        # function renderHistoryList(historyLog) {
-        #     const chatLog = document.getElementById('chat-log');
-        #     chatLog.innerHTML = '';
-            
-        #     historyLog.forEach(data => {
-        #         const elem = createMessageElement(data);
-        #         chatLog.appendChild(elem);
-        #     });
-        #     chatLog.scrollTop = chatLog.scrollHeight;
-        # }
-
-        # socket.on('receive_message', function(data) {
-        #     const chatLog = document.getElementById('chat-log');
-        #     const incomingName = data.name || 'Anonymous';
-            
-        #     const messageData = {
-        #         name: incomingName,
-        #         msg: data.msg || '',
-        #         timestamp: data.timestamp || new Date().toISOString()
-        #     };
-function renderHistoryList(historyLog) {
-            const chatLog = document.getElementById('chat-log');
-            chatLog.innerHTML = '';
-            
-            historyLog.forEach(data => {
-                const elem = createMessageElement(data);
-                chatLog.appendChild(elem);
-            });
-            chatLog.scrollTop = chatLog.scrollHeight;
-        }
-
-        socket.on('receive_message', function(data) {
-            const chatLog = document.getElementById('chat-log');
-            const incomingName = data.name || 'Anonymous';
-            // ... (以降の既存の処理)
-        });
-
-        // Enterキーでの強制送信処理
+        // キーボードイベントの処理（Enterで送信、Shift+Enterで改行）
         document.addEventListener('DOMContentLoaded', function() {
             const inputField = document.getElementById('message-input');
-            if (inputField) {
-                inputField.addEventListener('keydown', function(event) {
-                    if (event.key === 'Enter') {
-                        event.preventDefault(); // 改行を防ぐ
-                        if (typeof sendMessage === 'function') {
-                            sendMessage();
-                        }
+            if (!inputField) return;
+
+            inputField.addEventListener('keydown', function(event) {
+                // 日本語変換中のEnterは無視する
+                if (event.isComposing || event.keyCode === 229) {
+                    return;
+                }
+
+                if (event.key === 'Tab' && event.shiftKey) {
+                    const messages = document.querySelectorAll('#chat-log .message');
+                    if (messages.length > 0) {
+                        event.preventDefault();
+                        messages[messages.length - 1].focus();
                     }
-                });
-            }
-        });
-        
-            const elem = createMessageElement(messageData);
-            chatLog.appendChild(elem);
-            chatLog.scrollTop = chatLog.scrollHeight;
-
-            playDingDong();
-        });
-
-        const modal = document.getElementById('settings-modal');
-        const settingsIcon = document.getElementById('settings-icon');
-        const closeModalBtn = document.getElementById('close-modal-btn');
-
-        settingsIcon.addEventListener('click', function() {
-            modal.style.display = 'block';
-            modal.setAttribute('aria-hidden', 'false');
-        });
-
-        function closeModal() {
-            modal.style.display = 'none';
-            modal.setAttribute('aria-hidden', 'true');
-        }
-
-        closeModalBtn.addEventListener('click', closeModal);
-        window.addEventListener('click', function(event) {
-            if (event.target === modal) {
-                closeModal();
-            }
-        });
-
-        document.getElementById('save-settings-btn').addEventListener('click', function() {
-            const pwd = document.getElementById('settings-password').value;
-            const name = document.getElementById('settings-name').value;
-            const timestampChecked = document.getElementById('settings-timestamp').checked;
-
-            localStorage.setItem('chat_password', pwd);
-            localStorage.setItem('chat_name', name);
-            localStorage.setItem('chat_timestamp', timestampChecked);
-
-            location.reload();
-        });
-    </script>
-</body>
-</html>
-"""
-
-@app.route('/')
-def index():
-    return render_template_string(HTML_TEMPLATE)
-
-@socketio.on('connect')
-def handle_connect():
-    history = load_server_history()
-    emit('load_history', history)
-
-@socketio.on('send_message')
-def handle_message(data):
-    msg = data.get('msg', '').strip()
-    if not msg:
-        return
-        
-    name = data.get('name', 'Anonymous')
-    JST = timezone(timedelta(hours=+9), 'JST')
-    timestamp = datetime.now(JST).isoformat()
-    
-    message_data = {
-        'name': name,
-        'msg': msg,
-        'timestamp': timestamp
-    }
-    
-    try:
-        response = supabase.table("chat_messages").insert(message_data).execute()
-        print(f"✅ Successfully saved to Supabase: {response}")
-    except Exception as e:
-        print(f"❌ Error saving to Supabase: {e}")
-    
-    socketio.emit('receive_message', message_data)
-
-if __name__ == '__main__':
-    port = int(os.environ.get("PORT", 5000))
-    socketio.run(app, host='0.0.0.0', port=port, debug=True, allow_unsafe_werkzeug=True)
-            
-            // 下記の「sendMessage()」をご自身の送信処理の関数名に書き換えてください
-            sendMessage(); 
-        }
-    });
-}
-        const socket = io({ transports: ['polling'] });
-
-        function playDingDong() {
-            try {
-                const AudioContext = window.AudioContext || window.webkitAudioContext;
-                if (!AudioContext) return;
-                const ctx = new AudioContext();
-                
-                const osc1 = ctx.createOscillator();
-                const gain1 = ctx.createGain();
-                osc1.type = 'sine';
-                osc1.frequency.setValueAtTime(587.33, ctx.currentTime);
-                gain1.gain.setValueAtTime(0.1, ctx.currentTime);
-                gain1.gain.exponentialRampToValueAtTime(0.001, ctx.currentTime + 0.4);
-                osc1.connect(gain1);
-                gain1.connect(ctx.destination);
-                osc1.start(ctx.currentTime);
-                osc1.stop(ctx.currentTime + 0.4);
-
-                const osc2 = ctx.createOscillator();
-                const gain2 = ctx.createGain();
-                osc2.type = 'sine';
-                osc2.frequency.setValueAtTime(440.00, ctx.currentTime + 0.15);
-                gain2.gain.setValueAtTime(0.1, ctx.currentTime + 0.15);
-                gain2.gain.exponentialRampToValueAtTime(0.001, ctx.currentTime + 0.6);
-                osc2.connect(gain2);
-                gain2.connect(ctx.destination);
-                osc2.start(ctx.currentTime + 0.15);
-                osc2.stop(ctx.currentTime + 0.6);
-            } catch (e) {
-                console.log("Audio playback failed:", e);
-            }
-        }
-
-        window.addEventListener('DOMContentLoaded', () => {
-            const savedPassword = localStorage.getItem('chat_password') || '';
-            const savedName = localStorage.getItem('chat_name') || '';
-            const savedTimestamp = localStorage.getItem('chat_timestamp') === 'true';
-
-            document.getElementById('settings-password').value = savedPassword;
-            document.getElementById('settings-name').value = savedName;
-            document.getElementById('settings-timestamp').checked = savedTimestamp;
-        });
-
-        function sendMessage() {
-            const input = document.getElementById('message-input');
-            const message = input.value.trim();
-            const name = localStorage.getItem('chat_name') || 'Anonymous';
-            const password = localStorage.getItem('chat_password') || '';
-            
-            if (message !== "") {
-                socket.emit('send_message', { 
-                    msg: message, 
-                    name: name,
-                    password: password 
-                });
-                input.value = ''; 
-            }
-        }
-
-        # document.getElementById('message-input').addEventListener('keydown', function(event) {
-        #     if (event.key === 'Tab' && event.shiftKey) {
-        #         const messages = document.querySelectorAll('#chat-log .message');
-        #         if (messages.length > 0) {
-        #             event.preventDefault();
-        #             messages[messages.length - 1].focus();
-        #         }
-        #         return;
-        #     }
-
-        #     if (event.key === 'Enter') {
-        #         if (event.shiftKey) {
-        #             return;
-        #         } else {
-        #             event.preventDefault();
-        #             sendMessage();
-        #         }
-        #     }
-        # });
-        document.getElementById('message-input').addEventListener('keydown', function(event) {
-            // 日本語入力の変換確定時のEnterは送信しないようにする
-            if (event.isComposing || event.keyCode === 229) {
-                return;
-            }
-
-            if (event.key === 'Tab' && event.shiftKey) {
-                const messages = document.querySelectorAll('#chat-log .message');
-                if (messages.length > 0) {
-                    event.preventDefault();
-                    messages[messages.length - 1].focus();
+                    return;
                 }
-                return;
-            }
 
-            if (event.key === 'Enter') {
-                if (event.shiftKey) {
-                    return; // Shift + Enter は改行
-                } else {
-                    event.preventDefault();
-                    sendMessage(); // 通常のEnterで送信
+                if (event.key === 'Enter') {
+                    if (event.shiftKey) {
+                        return; // Shift + Enter は改行を許可
+                    } else {
+                        event.preventDefault();
+                        sendMessage(); // 通常のEnterで送信
+                    }
                 }
-            }
+            });
         });
+
         socket.on('load_history', function(history) {
             if (Array.isArray(history)) {
                 renderHistoryList(history);
@@ -696,17 +362,6 @@ if __name__ == '__main__':
             }
         });
 
-        # document.getElementById('save-settings-btn').addEventListener('click', function() {
-        #     const pwd = document.getElementById('settings-password').value;
-        #     const name = document.getElementById('settings-name').value;
-        #     const timestampChecked = document.getElementById('settings-timestamp').checked;
-
-        #     localStorage.setItem('chat_password', pwd);
-        #     localStorage.setItem('chat_name', name);
-        #     localStorage.setItem('chat_timestamp', timestampChecked);
-
-        #     location.reload();
-        # });
         document.getElementById('save-settings-btn').addEventListener('click', function() {
             const pwd = document.getElementById('settings-password').value;
             const name = document.getElementById('settings-name').value;
@@ -717,7 +372,7 @@ if __name__ == '__main__':
             localStorage.setItem('chat_timestamp', timestampChecked);
 
             location.reload();
-        });   
+        });
     </script>
 </body>
 </html>
@@ -729,7 +384,6 @@ def index():
 
 @socketio.on('connect')
 def handle_connect():
-    # 接続時にSupabaseから履歴を取得して送信
     history = load_server_history()
     emit('load_history', history)
 
@@ -749,14 +403,12 @@ def handle_message(data):
         'timestamp': timestamp
     }
     
-    # Supabaseの 'messages' テーブルへ直接保存（インサート）
     try:
         response = supabase.table("chat_messages").insert(message_data).execute()
         print(f"✅ Successfully saved to Supabase: {response}")
     except Exception as e:
         print(f"❌ Error saving to Supabase: {e}")
     
-    # 全員にブロードキャスト送信
     socketio.emit('receive_message', message_data)
 
 if __name__ == '__main__':
