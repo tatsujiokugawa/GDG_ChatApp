@@ -375,12 +375,14 @@ HTML_TEMPLATE = r"""
             const chatLog = document.getElementById('chat-log');
             const incomingName = data.name || 'Anonymous';
             
-            const messageData = {
-                name: incomingName,
-                msg: data.msg || '',
-                timestamp: data.timestamp || new Date().toISOString()
-            };
-
+            # const messageData = {
+            #     name: incomingName,
+            #     msg: data.msg || '',
+            #     timestamp: data.timestamp || new Date().toISOString()
+            # };
+            // サーバーから受け取ったメッセージデータから、名前を安全に取得する
+            const authorName = messageData.username || messageData.name || 'Anonymous';
+            
             const elem = createMessageElement(messageData);
             chatLog.appendChild(elem);
             chatLog.scrollTop = chatLog.scrollHeight;
@@ -411,7 +413,7 @@ HTML_TEMPLATE = r"""
 
         document.getElementById('save-settings-btn').addEventListener('click', function() {
             const pwd = document.getElementById('settings-password').value;
-            const name = document.getElementById('settings-name', name).value;
+            const name = document.getElementById('settings-name').value;
             const timestampChecked = document.getElementById('settings-timestamp').checked;
 
             localStorage.setItem('chat_password', pwd);
@@ -437,32 +439,7 @@ def handle_connect():
 
 # @socketio.on('send_message')
 # def handle_message(data):
-#     msg = data.get('msg', '').strip()
-#     if not msg:
-#         return
-        
-#     name = data.get('name', 'Anonymous')
-#     JST = timezone(timedelta(hours=+9), 'JST')
-#     timestamp = datetime.now(JST).isoformat()
-    
-#     message_data = {
-#         'name': name,
-#         'msg': msg,
-#         'timestamp': timestamp
-#     }
-    
-#     # Supabaseの 'messages' テーブルへ直接保存（インサート）
-#     # try:
-#     #     response = supabase.table("chat_messages).insert(message_data).execute()
-#     #     print(f"✅ Successfully saved to Supabase: {response}")
-#     try:
-#         response = supabase.table("chat_messages").insert(message_data).execute()
-#         print(f"✅ Successfully saved to Supabase: {response}")
-#     except Exception as e:
-#         print(f"❌ Error saving to Supabase: {e}")
-    
-#     # 全員にブロードキャスト送信
-#     socketio.emit('receive_message', message_data)
+
 @socketio.on('send_message')
 def handle_message(data):
     msg = data.get('msg', '').strip()
