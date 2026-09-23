@@ -18,12 +18,22 @@ def load_server_history():
     """Supabaseから直接メッセージ履歴を最大100件取得する"""
     try:
         print("👉 【読込処理】Supabaseへ履歴の問い合わせを開始します...")
-        response = supabase.table("chat_messages").select("*").order("timestamp", desc=False).limit(100).execute()
+        # カラム名 'time_str' に合わせて修正
+        response = supabase.table("chat_messages").select("*").order("time_str", desc=False).limit(100).execute()
         
         count = len(response.data) if response.data else 0
         print(f"👉 【読込成功】取得できた件数: {count}件")
         
-        return response.data if response.data else []
+        # 画面側が扱いやすいようにキー名を変換して返す
+        formatted_history = []
+        if response.data:
+            for row in response.data:
+                formatted_history.append({
+                    'name': row.get('username', 'Anonymous'),
+                    'msg': row.get('msg', ''),
+                    'timestamp': row.get('time_str', '')
+                })
+        return formatted_history
     except Exception as e:
         print(f"❌ Error loading history from Supabase: {e}")
         return []
@@ -153,7 +163,6 @@ HTML_TEMPLATE = r"""
     <script>
         const socket = io({ transports: ['polling'] });
 
-        // ▼ 接続が確立した瞬間に、サーバーへ過去ログを要求するよう修正
         socket.on('connect', function() {
             console.log("👉 サーバーとの接続確立：過去ログを要求します");
             socket.emit('get_history');
@@ -395,7 +404,6 @@ def index():
 def handle_connect():
     print("👉 【接続検知】クライアントが接続しました。")
 
-# ▼ クライアントからの明示的な履歴要求を受け取る窓口を追加
 @socketio.on('get_history')
 def handle_get_history():
     print("👉 【履歴要求受信】クライアントへ過去ログを送信します。")
@@ -412,19 +420,19 @@ def handle_message(data):
     JST = timezone(timedelta(hours=+9), 'JST')
     timestamp = datetime.now(JST).isoformat()
     
-    message_data = {
-        'name': name,
+    # Supabase側の実際のカラム名 ('username', 'msg', 'time_str') に合わせる
+    message_data_db = {
+        'username': name,
         'msg': msg,
-        'timestamp': timestamp
+        'time_str': timestamp
     }
     
     try:
-        # 1. 新しいメッセージの保存
-        response = supabase.table("chat_messages").insert(message_data).execute()
+        response = supabase.table("chat_messages").insert(message_data_db).execute()
         print(f"✅ 【保存成功】Supabaseへ書き込みました: {response.data}")
         
-        # 2. 100件超過分の整理（古い順に削除）
-        all_rows_res = supabase.table("chat_messages").select("id").order("timestamp", desc=False).execute()
+        # 整理用（古い順に100件超過分を削除）
+        all_rows_res = supabase.table("chat_messages").select("id").order("time_str", desc=False).execute()
         rows = all_rows_res.data if all_rows_res.data else []
         
         if len(rows) > 100:
@@ -438,7 +446,13 @@ def handle_message(data):
     except Exception as e:
         print(f"❌ Error saving/trimming in Supabase: {e}")
     
-    socketio.emit('receive_message', message_data)
+    # ブラウザへ送るデータ構造
+    broadcast_data = {
+        'name': name,
+        'msg': msg,
+        'timestamp': timestamp
+    }
+    socketio.emit('receive_message', broadcast_data)
 
 if __name__ == '__main__':
     port = int(os.environ.get("PORT", 5000))
