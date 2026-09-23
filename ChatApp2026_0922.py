@@ -3,6 +3,7 @@ from flask import Flask, render_template_string
 from flask_socketio import SocketIO, emit
 from supabase import create_client, Client
 from datetime import datetime, timezone, timedelta
+
 app = Flask(__name__)
 socketio = SocketIO(app, cors_allowed_origins="*")
 
@@ -16,12 +17,12 @@ supabase: Client = create_client(SUPABASE_URL, SUPABASE_KEY)
 def load_server_history():
     """Supabaseから直接メッセージ履歴を最大100件取得する"""
     try:
+        print("👉 【読込処理】Supabaseへ履歴の問い合わせを開始します...")
         response = supabase.table("chat_messages").select("*").order("timestamp", desc=False).limit(100).execute()
-# 🔴 【チェックポイント3 & 4】ここでSupabaseから何件読めたか、中身は何かをターミナルに表示します
-        print(f"👉 【読み込み結果】取得できた件数: {len(response.data) if response.data else 0}件")
-        print(f"👉 【中身データ】: {response.data}")
         
-        print(f"Loaded history from Supabase: {len(response.data) if response.data else 0} messages")
+        count = len(response.data) if response.data else 0
+        print(f"👉 【読込成功】取得できた件数: {count}件")
+        
         return response.data if response.data else []
     except Exception as e:
         print(f"❌ Error loading history from Supabase: {e}")
@@ -152,6 +153,12 @@ HTML_TEMPLATE = r"""
     <script>
         const socket = io({ transports: ['polling'] });
 
+        // ▼ 接続が確立した瞬間に、サーバーへ過去ログを要求するよう修正
+        socket.on('connect', function() {
+            console.log("👉 サーバーとの接続確立：過去ログを要求します");
+            socket.emit('get_history');
+        });
+
         function playDingDong() {
             try {
                 const AudioContext = window.AudioContext || window.webkitAudioContext;
@@ -210,13 +217,11 @@ HTML_TEMPLATE = r"""
             }
         }
 
-        // キーボードイベントの処理（Enterで送信、Shift+Enterで改行）
         document.addEventListener('DOMContentLoaded', function() {
             const inputField = document.getElementById('message-input');
             if (!inputField) return;
 
             inputField.addEventListener('keydown', function(event) {
-                // 日本語変換中のEnterは無視する
                 if (event.isComposing || event.keyCode === 229) {
                     return;
                 }
@@ -232,16 +237,17 @@ HTML_TEMPLATE = r"""
 
                 if (event.key === 'Enter') {
                     if (event.shiftKey) {
-                        return; // Shift + Enter は改行を許可
+                        return; 
                     } else {
                         event.preventDefault();
-                        sendMessage(); // 通常のEnterで送信
+                        sendMessage(); 
                     }
                 }
             });
         });
 
         socket.on('load_history', function(history) {
+            console.log("👉 【ブラウザ受信】サーバーから受け取った履歴データ:", history);
             if (Array.isArray(history)) {
                 renderHistoryList(history);
             }
@@ -387,6 +393,12 @@ def index():
 
 @socketio.on('connect')
 def handle_connect():
+    print("👉 【接続検知】クライアントが接続しました。")
+
+# ▼ クライアントからの明示的な履歴要求を受け取る窓口を追加
+@socketio.on('get_history')
+def handle_get_history():
+    print("👉 【履歴要求受信】クライアントへ過去ログを送信します。")
     history = load_server_history()
     emit('load_history', history)
 
@@ -407,10 +419,24 @@ def handle_message(data):
     }
     
     try:
+        # 1. 新しいメッセージの保存
         response = supabase.table("chat_messages").insert(message_data).execute()
-        print(f"✅ Successfully saved to Supabase: {response}")
+        print(f"✅ 【保存成功】Supabaseへ書き込みました: {response.data}")
+        
+        # 2. 100件超過分の整理（古い順に削除）
+        all_rows_res = supabase.table("chat_messages").select("id").order("timestamp", desc=False).execute()
+        rows = all_rows_res.data if all_rows_res.data else []
+        
+        if len(rows) > 100:
+            excess_count = len(rows) - 100
+            targets_to_delete = rows[:excess_count]
+            target_ids = [row["id"] for row in targets_to_delete]
+            
+            supabase.table("chat_messages").delete().in_("id", target_ids).execute()
+            print(f"🧹 【整理完了】メッセージが100件を超えたため、古い {excess_count} 件を削除しました。")
+            
     except Exception as e:
-        print(f"❌ Error saving to Supabase: {e}")
+        print(f"❌ Error saving/trimming in Supabase: {e}")
     
     socketio.emit('receive_message', message_data)
 
